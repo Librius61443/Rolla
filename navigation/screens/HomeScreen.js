@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import haversine from 'haversine';
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, Text, TouchableOpacity, View, Dimensions } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import { getCurrentCoordinates } from '../../location/CurrentLocation';
 import { styles } from '../../styles/homeStyles';
 import RentalItem from '../components/RentalItem';
@@ -12,6 +13,12 @@ export default function HomeScreen() {
   const [logs, setLogs] = useState([ ]);
   const [rentals, setRentals] = useState([]);
   const [loadingDistances, setLoadingDistances] = useState(false);
+  const [region, setRegion] = useState(() => ({
+    latitude: 43.6532,
+    longitude: -79.3832,
+    latitudeDelta: 0.12,
+    longitudeDelta: 0.12,
+  }));
     
 
 
@@ -125,6 +132,15 @@ export default function HomeScreen() {
         await AsyncStorage.setItem('rentals', JSON.stringify(sorted));
         setRentals(sorted);
         console.log('Loaded mock rentals into AsyncStorage and state.');
+        // center map on first item if available
+        const first = sorted && sorted[0];
+        if (first) {
+          const lat = Number(first.x_coordinate ?? first.latitude ?? first.lat);
+          const lng = Number(first.y_coordinate ?? first.longitude ?? first.lng);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            setRegion({ latitude: lat, longitude: lng, latitudeDelta: 0.08, longitudeDelta: 0.08 });
+          }
+        }
       } catch (e) {
         console.error('Failed to load mock rentals', e);
       } finally {
@@ -142,6 +158,7 @@ export default function HomeScreen() {
     const dayOfWeekIndex = myDate.getDay();
 
     // Read data from retrieveData and display logs
+    const mapHeight = Math.round(Dimensions.get('window').height * 0.42);
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -155,14 +172,39 @@ export default function HomeScreen() {
                   <Text style={{ color: '#0a84ff', fontWeight: '600' }}>Refresh</Text>
                 </TouchableOpacity>
             </View>
-            
+
               {loadingDistances ? (
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                   <ActivityIndicator size="large" color="#0a84ff" />
                   <Text style={{ marginTop: 8, color: '#666' }}>Calculating distances...</Text>
                 </View>
-              ) : rentals.length > 0 && (
-                <View>
+              ) : (
+                <View style={{ flex: 1 }}>
+                  {/* Centered map area */}
+                  <View style={{ alignItems: 'center', marginVertical: 12 }}>
+                    <MapView
+                      style={{ width: '100%', height: mapHeight, borderRadius: 12 }}
+                      initialRegion={region}
+                      region={region}
+                      onRegionChangeComplete={(r) => setRegion(r)}
+                    >
+                      {rentals.map((r) => {
+                        const lat = Number(r.x_coordinate ?? r.latitude ?? r.lat);
+                        const lng = Number(r.y_coordinate ?? r.longitude ?? r.lng);
+                        if (isNaN(lat) || isNaN(lng)) return null;
+                        return (
+                          <Marker
+                            key={r.id ?? `${lat}_${lng}`}
+                            coordinate={{ latitude: lat, longitude: lng }}
+                            title={r.location ?? 'Charging Station'}
+                            description={r.waitTime ? `Wait: ${r.waitTime}m` : ''}
+                          />
+                        );
+                      })}
+                    </MapView>
+                  </View>
+
+                  {/* List below the map */}
                   <FlatList
                     data={rentals}
                     keyExtractor={(item, index) => item.id ?? index.toString()}
