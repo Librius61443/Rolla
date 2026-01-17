@@ -8,8 +8,8 @@ import HomeScreen from './screens/HomeScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import CameraScreen from './screens/CameraScreen'; //
 
-// Screen names
-const homeName = "Stations";
+//Screen names
+const homeName = "Maps";
 const calendarName = "Schedule";
 const settingsName = "Settings";
 const cameraName = "Camera"; // Added new constant
