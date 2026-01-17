@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View } from 'react-native';
-import MapView from 'react-native-maps';
+import MapView, { Marker } from 'react-native-maps';
 import React, { useState, useEffect } from 'react';
 import { customStyleJson } from '../../styles/mapStyles';
 //
@@ -12,6 +12,8 @@ import { getCurrentCoordinates } from '../../location/CurrentLocation';
 
 export default function HomeScreen() {
   const [initialRegion, setInitialRegion] = useState(null);
+  const [pins, setPins] = useState([]);
+
 
   useEffect(() => {
     (async () => {
@@ -33,9 +35,15 @@ export default function HomeScreen() {
           provider='google'
           style={{ flex: 1 }}
           initialRegion={initialRegion}
-          // onRegionChangeComplete={(r) => setRegion(r)}
           customMapStyle={customStyleJson}
-        />
+          onPress={(e) => {
+            const { latitude, longitude } = e.nativeEvent.coordinate;
+            setPins((prev) => [...prev, { latitude, longitude }]);
+          }}
+        >
+          {pins.map((pin, index) => (
+          <Marker key={index} coordinate={pin} />))}
+      </MapView>
       </View>
     );
 }

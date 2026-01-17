@@ -8,7 +8,7 @@ import HomeScreen from './screens/HomeScreen';
 import SettingsScreen from './screens/SettingsScreen';
 
 //Screen names
-const homeName = "Stations";
+const homeName = "Maps";
 const calendarName = "Schedule";
 const settingsName = "Settings";
 
