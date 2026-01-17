@@ -11,7 +11,7 @@
     "lint": "expo lint"
   },
   "dependencies": {
-    "@expo/vector-icons": "^15.0.2",
+    "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/checkbox": "^0.5.20",
     "@react-navigation/bottom-tabs": "^7.4.0",
@@ -19,6 +19,7 @@
     "@react-navigation/native": "^7.1.8",
     "@rnmapbox/maps": "^10.2.10",
     "expo": "~54.0.9",
+    "expo-camera": "~17.0.10",
     "expo-checkbox": "^5.0.7",
     "expo-constants": "~18.0.9",
     "expo-dev-client": "~6.0.20",
