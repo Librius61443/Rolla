@@ -43,6 +43,18 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsDownloadToken": "YOUR_MAPBOX_SECRET_TOKEN"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Mapility to use your location to show your position on the map."
+        }
       ]
     ],
     "experiments": {
