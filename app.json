@@ -46,9 +46,7 @@
       ],
       [
         "@rnmapbox/maps",
-        {
-          "RNMapboxMapsDownloadToken": "YOUR_MAPBOX_SECRET_TOKEN"
-        }
+        {}
       ],
       [
         "expo-location",
