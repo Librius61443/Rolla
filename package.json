@@ -19,6 +19,7 @@
     "@react-navigation/native": "^7.1.8",
     "@rnmapbox/maps": "^10.2.10",
     "expo": "~54.0.9",
+    "expo-camera": "~17.0.10",
     "expo-checkbox": "^5.0.7",
     "expo-constants": "~18.0.9",
     "expo-dev-client": "~6.0.20",
