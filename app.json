@@ -43,7 +43,13 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      // [
+      //   "@rnmapbox/maps",
+      //   {
+      //     "RNMapboxMapsDownloadToken": "sk.eyJ1Ijoic3BsaXhlbnQiLCJhIjoiY21raXJtcXNnMGg4YzNob2hybmRvMW8ybCJ9.siYW-g8boZj51DD_yfk1LQ"
+      //   }
+      // ]
     ],
     "experiments": {
       "typedRoutes": true,

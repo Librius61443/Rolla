@@ -44,7 +44,10 @@ function MainContainer() {
       })}
     >
 
-        <Tab.Screen name={homeName} component={HomeScreen} />
+        <Tab.Screen 
+        name={homeName} component={HomeScreen} options={{
+          headerShown: false
+        }}/>
         <Tab.Screen name={calendarName} component={CalendarScreen} />
         <Tab.Screen name={settingsName} component={SettingsScreen} />
 
