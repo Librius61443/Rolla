@@ -1,25 +1,10 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import MainContainer from './navigation/MainContainer';
-// import TestIcon from './navigation/TestIcons';
-// import NotificationsHandler from './notifications/notificationsHandler';
-// import { useEffect } from 'react';
+import AppNavigator from './src/navigation/AppNavigator';
 
-function App() {
-  // useEffect(() => {
-  //   notificationsHandler(); // call your setup logic once
-  // }, []);
-
+export default function App() {
   return (
-    <GestureHandlerRootView>
-      <>
-        <MainContainer />
-        {/* <TestIcon /> */}
-        {/* <NotificationsHandler /> */}
-      </>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AppNavigator />
     </GestureHandlerRootView>
-    // <TestIcon />
-
   );
 }
-
-export default App;
