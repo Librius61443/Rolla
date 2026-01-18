@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../styles/theme';
+import { useAuth } from '../contexts/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CameraCapture from './CameraCapture';
 import { createReport } from '../services/api';
@@ -47,6 +48,7 @@ const ACCESSIBILITY_ITEMS = [
 
 export default function AccessibilityReportSheet({ visible, onClose, onReport }) {
   const { colors } = useTheme();
+  const { refreshUser } = useAuth();
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(SNAP_BOTTOM)).current;
   const [selectedItem, setSelectedItem] = useState(null);
@@ -204,30 +206,68 @@ export default function AccessibilityReportSheet({ visible, onClose, onReport })
         return;
       }
 
-      // Submit report to backend
-      const result = await createReport(
-        selectedItem,
-        location.longitude,
-        location.latitude,
-        photoUri
-      );
+      // Create optimistic report immediately for better UX
+      const optimisticReport = {
+        _id: `temp-${Date.now()}`, // Temporary ID
+        type: selectedItem,
+        location: {
+          longitude: location.longitude,
+          latitude: location.latitude,
+        },
+        photoUrl: photoUri,
+        status: 'pending',
+        confirmations: [],
+        createdAt: new Date().toISOString(),
+        isOptimistic: true, // Flag for optimistic update
+      };
 
-      // Notify parent of new report
+      // Notify parent immediately with optimistic report
       if (onReport) {
-        onReport(result);
+        onReport(optimisticReport);
       }
-      
+
+      // Close the sheet immediately for snappy UX
+      setIsSubmitting(false);
+      setSelectedItem(null);
+      handleClose();
+
+      // Show success message IMMEDIATELY for better UX
       Alert.alert(
         'Thank You!', 
-        result.isConfirmation 
-          ? 'Your confirmation has been added to an existing report.'
-          : 'Your accessibility report has been submitted.',
+        'Your accessibility report has been submitted!',
         [{ text: 'OK' }]
       );
+
+      // Submit report to backend in the background
+      try {
+        const result = await createReport(
+          selectedItem,
+          location.longitude,
+          location.latitude,
+          photoUri
+        );
+
+        // Update with real report data (parent will refresh)
+        if (onReport && result) {
+          onReport(result);
+        }
+        
+        // Refresh user data to update points and stats
+        if (refreshUser) {
+          console.log('Refreshing user after report creation...');
+          await refreshUser();
+        }
+      } catch (submitError) {
+        console.error('Error submitting report:', submitError);
+        Alert.alert('Error', 'Failed to submit report. The marker will be removed.');
+        // Notify parent to remove optimistic report
+        if (onReport) {
+          onReport({ _id: optimisticReport._id, removed: true });
+        }
+      }
     } catch (error) {
-      console.error('Error submitting report:', error);
-      Alert.alert('Error', 'Failed to submit report. Please try again.');
-    } finally {
+      console.error('Error preparing report:', error);
+      Alert.alert('Error', 'Failed to prepare report. Please try again.');
       setIsSubmitting(false);
       setSelectedItem(null);
       handleClose();

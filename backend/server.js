@@ -3,13 +3,14 @@
  * Express server with MongoDB for accessibility reports
  */
 
-require('dotenv').config();
+require('dotenv').config({ path: __dirname + '/.env' });
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 
 const reportRoutes = require('./routes/reports');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,6 +25,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.use('/api/reports', reportRoutes);
+app.use('/api/auth', authRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -39,8 +41,9 @@ mongoose.connect(process.env.MONGODB_URI)
     const { startCleanupJob } = require('./services/reportCleanup');
     startCleanupJob();
     
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
+    // Listen on 0.0.0.0 to accept connections from other devices (like phone on hotspot)
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
     });
   })
   .catch((err) => {

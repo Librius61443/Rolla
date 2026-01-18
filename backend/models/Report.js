@@ -15,6 +15,10 @@ const photoSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  reporterUserId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -90,10 +94,16 @@ const reportSchema = new mongoose.Schema({
     },
   },
   
-  // Original reporter
+  // Original reporter (device ID for anonymous reports)
   creatorId: {
     type: String,
     required: true,
+  },
+  
+  // User account reference (optional, for logged-in users)
+  creatorUserId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
   },
   
   // Photos of the feature
@@ -135,6 +145,13 @@ const reportSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now,
+  },
+  
+  // Optional metadata for imported data
+  metadata: {
+    source: String,      // e.g., 'google_places', 'ptv'
+    name: String,        // Place name
+    externalId: String,  // External API ID
   },
 });
 

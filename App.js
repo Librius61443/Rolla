@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as SplashScreen from 'expo-splash-screen';
 import { ThemeProvider } from './src/styles/theme';
+import { AuthProvider } from './src/contexts/AuthContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import LoadingScreen from './src/components/LoadingScreen';
 import { MapReadyContext } from './src/contexts/MapReadyContext';
@@ -45,18 +46,20 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        <MapReadyContext.Provider value={handleMapReady}>
-          {/* Always render AppNavigator so map loads in background */}
-          <View style={{ flex: 1 }}>
-            <AppNavigator />
-          </View>
-          {/* Loading screen overlays on top */}
-          {isLoading && (
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }}>
-              <LoadingScreen onFinish={handleLoadingFinish} isReady={appIsReady} />
+        <AuthProvider>
+          <MapReadyContext.Provider value={handleMapReady}>
+            {/* Always render AppNavigator so map loads in background */}
+            <View style={{ flex: 1 }}>
+              <AppNavigator />
             </View>
-          )}
-        </MapReadyContext.Provider>
+            {/* Loading screen overlays on top */}
+            {isLoading && (
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }}>
+                <LoadingScreen onFinish={handleLoadingFinish} isReady={appIsReady} />
+              </View>
+            )}
+          </MapReadyContext.Provider>
+        </AuthProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

@@ -11,15 +11,18 @@ import {
   StyleSheet, 
   Animated, 
   Dimensions,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme, darkColors } from '../styles/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function MenuButton() {
   const { isDark, themeMode, setTheme, colors, mapTheme } = useTheme();
+  const navigation = useNavigation();
   
   const [isOpen, setIsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -276,7 +279,10 @@ export default function MenuButton() {
                   styles.menuItem,
                   pressed && { backgroundColor: colors.tertiary },
                 ]}
-                onPress={() => closeMenu()}
+                onPress={() => {
+                  closeMenu();
+                  navigation.navigate('Profile');
+                }}
               >
                 <View style={styles.menuItemLeft}>
                   <View style={[styles.iconCircle, { backgroundColor: colors.secondary }]}>
@@ -291,7 +297,14 @@ export default function MenuButton() {
                   styles.menuItem,
                   pressed && { backgroundColor: colors.tertiary },
                 ]}
-                onPress={() => closeMenu()}
+                onPress={() => {
+                  closeMenu();
+                  Alert.alert(
+                    'Navigation',
+                    'To start navigation, tap on an accessibility report marker on the map, then press "Navigate" to get walking directions.',
+                    [{ text: 'Got it' }]
+                  );
+                }}
               >
                 <View style={styles.menuItemLeft}>
                   <View style={[styles.iconCircle, { backgroundColor: colors.secondary }]}>
@@ -306,7 +319,10 @@ export default function MenuButton() {
                   styles.menuItem,
                   pressed && { backgroundColor: colors.tertiary },
                 ]}
-                onPress={() => closeMenu()}
+                onPress={() => {
+                  closeMenu();
+                  navigation.navigate('About');
+                }}
               >
                 <View style={styles.menuItemLeft}>
                   <View style={[styles.iconCircle, { backgroundColor: colors.secondary }]}>

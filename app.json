@@ -1,18 +1,22 @@
 {
   "expo": {
-    "name": "my-app",
-    "slug": "my-app",
+    "name": "Rolla",
+    "slug": "rolla",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./src/assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "rolla",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.librius61443.myapp",
+      "bundleIdentifier": "com.rolla.accessibility",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Rolla needs your location to show accessibility features near you and help you navigate.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Rolla needs your location to show accessibility features near you.",
+        "NSCameraUsageDescription": "Rolla needs camera access to take photos of accessibility features you report.",
+        "NSPhotoLibraryUsageDescription": "Rolla needs photo library access to select photos of accessibility features."
       }
     },
     "android": {
@@ -43,13 +47,7 @@
             "backgroundColor": "#3355FF"
           }
         }
-      ],
-      // [
-      //   "@rnmapbox/maps",
-      //   {
-      //     "RNMapboxMapsDownloadToken": "sk.eyJ1Ijoic3BsaXhlbnQiLCJhIjoiY21raXJtcXNnMGg4YzNob2hybmRvMW8ybCJ9.siYW-g8boZj51DD_yfk1LQ"
-      //   }
-      // ]
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -58,8 +56,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "0b1f09a6-d686-4845-bfc7-4194fd9c6426"
+        "projectId": "cc3838d1-e21d-4c80-acbd-30ef35b7d9ea"
       }
-    }
+    },
+    "owner": "splixent"
   }
 }

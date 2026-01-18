@@ -6,12 +6,34 @@
 const express = require('express');
 const router = express.Router();
 const Report = require('../models/Report');
+const User = require('../models/User');
 const upload = require('../config/multer');
 const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
+const jwt = require('jsonwebtoken');
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const JWT_SECRET = process.env.JWT_SECRET || 'rolla-accessibility-secret-key-2026';
+
+/**
+ * Optional auth middleware - attaches user if token present
+ */
+const optionalAuth = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (token) {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      const user = await User.findById(decoded.userId);
+      if (user) {
+        req.user = user;
+      }
+    }
+  } catch (error) {
+    // Token invalid, continue without user
+  }
+  next();
+};
 
 /**
  * Helper to generate a simple user ID from request
@@ -23,11 +45,13 @@ const getUserId = (req) => {
 
 /**
  * Process and optimize uploaded image
+ * Fixes rotation from EXIF data (portrait photos)
  */
 const processImage = async (filePath) => {
   const outputPath = filePath.replace(/\.[^.]+$/, '_processed.jpg');
   
   await sharp(filePath)
+    .rotate() // Auto-rotate based on EXIF orientation
     .resize(1200, 1200, {
       fit: 'inside',
       withoutEnlargement: true,
@@ -100,16 +124,29 @@ router.get('/', async (req, res) => {
  * GET /api/reports/:id
  * Get a single report by ID
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
-    const report = await Report.findById(req.params.id);
+    const report = await Report.findById(req.params.id)
+      .populate('creatorUserId', 'username points level');
     
     if (!report) {
       return res.status(404).json({ error: 'Report not found' });
     }
     
+    // Get creator info
+    let creator = null;
+    if (report.creatorUserId) {
+      creator = {
+        _id: report.creatorUserId._id,
+        username: report.creatorUserId.username,
+        points: report.creatorUserId.points,
+        level: report.creatorUserId.level,
+      };
+    }
+    
     res.json({
       id: report._id,
+      _id: report._id,
       type: report.type,
       location: {
         longitude: report.location.coordinates[0],
@@ -118,6 +155,7 @@ router.get('/:id', async (req, res) => {
       status: report.status,
       isPermanent: report.isPermanent,
       confirmationCount: report.confirmations.length,
+      confirmations: report.confirmations.map(c => ({ userId: c.userId })),
       removalReportCount: report.removalReports.length,
       photos: report.photos
         .filter(p => !p.isHidden)
@@ -125,6 +163,8 @@ router.get('/:id', async (req, res) => {
           url: `${BASE_URL}${p.url}`,
           createdAt: p.createdAt,
         })),
+      creator: creator,
+      creatorId: report.creatorId,
       createdAt: report.createdAt,
       expiresAt: report.expiresAt,
     });
@@ -140,10 +180,11 @@ router.get('/:id', async (req, res) => {
  * Body: type, longitude, latitude
  * File: photo (multipart/form-data)
  */
-router.post('/', upload.single('photo'), async (req, res) => {
+router.post('/', optionalAuth, upload.single('photo'), async (req, res) => {
   try {
     const { type, longitude, latitude } = req.body;
     const userId = getUserId(req);
+    const user = req.user; // From optional auth
     
     if (!type || !longitude || !latitude) {
       return res.status(400).json({
@@ -175,24 +216,42 @@ router.post('/', upload.single('photo'), async (req, res) => {
       
       if (!alreadyConfirmed) {
         existingReport.confirmations.push({ userId });
+        
+        // Award points for confirmation
+        if (user) {
+          await user.addPoints('CONFIRMATION_GIVEN');
+        }
       }
       
       // Add photo to existing report
       existingReport.photos.push({
         url: photoUrl,
         reporterId: userId,
+        reporterUserId: user?._id,
       });
+      
+      // Award points for adding photo
+      if (user) {
+        await user.addPoints('PHOTO_ADDED');
+      }
       
       await existingReport.save();
       
       res.status(200).json({
         message: 'Added confirmation to existing report',
         id: existingReport._id,
+        _id: existingReport._id,
         type: existingReport.type,
+        location: {
+          longitude: existingReport.location.coordinates[0],
+          latitude: existingReport.location.coordinates[1],
+        },
         confirmationCount: existingReport.confirmations.length,
         status: existingReport.status,
         isPermanent: existingReport.isPermanent,
         isNew: false,
+        isConfirmation: true,
+        pointsEarned: user ? 7 : 0, // CONFIRMATION_GIVEN (2) + PHOTO_ADDED (5)
       });
     } else {
       // Create new report
@@ -203,23 +262,42 @@ router.post('/', upload.single('photo'), async (req, res) => {
           coordinates: [lon, lat],
         },
         creatorId: userId,
+        creatorUserId: user?._id,
         photos: [{
           url: photoUrl,
           reporterId: userId,
+          reporterUserId: user?._id,
         }],
         confirmations: [{ userId }], // Creator counts as first confirmation
       });
       
       await newReport.save();
       
+      // Award points for creating report AND adding the initial photo
+      let totalPointsEarned = 0;
+      if (user) {
+        await user.addPoints('REPORT_CREATED');
+        totalPointsEarned += 1;
+        
+        // Also award points for the initial photo
+        await user.addPoints('PHOTO_ADDED');
+        totalPointsEarned += 2;
+      }
+      
       res.status(201).json({
         message: 'Report created successfully',
         id: newReport._id,
+        _id: newReport._id,
         type: newReport.type,
+        location: {
+          longitude: newReport.location.coordinates[0],
+          latitude: newReport.location.coordinates[1],
+        },
         confirmationCount: 1,
         status: newReport.status,
         expiresAt: newReport.expiresAt,
         isNew: true,
+        pointsEarned: totalPointsEarned,
       });
     }
   } catch (error) {
@@ -229,12 +307,74 @@ router.post('/', upload.single('photo'), async (req, res) => {
 });
 
 /**
+ * POST /api/reports/:id/add-photo
+ * Add a photo to an existing report (when near the location)
+ */
+router.post('/:id/add-photo', optionalAuth, upload.single('photo'), async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const user = req.user;
+    const report = await Report.findById(req.params.id);
+    
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    
+    if (report.status === 'removed') {
+      return res.status(400).json({ error: 'This report has been removed' });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'Photo is required' });
+    }
+    
+    // Process the uploaded image
+    const processedPath = await processImage(req.file.path);
+    const photoUrl = `/uploads/${path.basename(processedPath)}`;
+    
+    // Add photo to report
+    report.photos.push({
+      url: photoUrl,
+      reporterId: userId,
+      reporterUserId: user?._id,
+    });
+    
+    // Award points for adding photo
+    if (user) {
+      await user.addPoints('PHOTO_ADDED');
+      
+      // Also award points to the original creator for receiving a photo
+      if (report.creatorUserId && !report.creatorUserId.equals(user._id)) {
+        const User = require('../models/User');
+        const creator = await User.findById(report.creatorUserId);
+        if (creator) {
+          await creator.addPoints('CONFIRMATION_RECEIVED');
+        }
+      }
+    }
+    
+    await report.save();
+    
+    res.json({
+      message: 'Photo added successfully',
+      photoUrl: photoUrl,
+      photoCount: report.photos.length,
+      pointsEarned: user ? 2 : 0, // PHOTO_ADDED points
+    });
+  } catch (error) {
+    console.error('Error adding photo:', error);
+    res.status(500).json({ error: 'Failed to add photo' });
+  }
+});
+
+/**
  * POST /api/reports/:id/confirm
  * Confirm that an accessibility feature exists
  */
-router.post('/:id/confirm', upload.single('photo'), async (req, res) => {
+router.post('/:id/confirm', optionalAuth, upload.single('photo'), async (req, res) => {
   try {
     const userId = getUserId(req);
+    const user = req.user; // From optional auth
     const report = await Report.findById(req.params.id);
     
     if (!report) {
@@ -257,6 +397,20 @@ router.post('/:id/confirm', upload.single('photo'), async (req, res) => {
     // Add confirmation
     report.confirmations.push({ userId });
     
+    // Award points for confirmation
+    if (user) {
+      await user.addPoints('CONFIRMATION_GIVEN');
+      
+      // Also award points to the original creator for receiving confirmation
+      if (report.creatorUserId && !report.creatorUserId.equals(user._id)) {
+        const User = require('../models/User');
+        const creator = await User.findById(report.creatorUserId);
+        if (creator) {
+          await creator.addPoints('CONFIRMATION_RECEIVED');
+        }
+      }
+    }
+    
     // If photo provided, add it
     if (req.file) {
       const processedPath = await processImage(req.file.path);
@@ -264,7 +418,13 @@ router.post('/:id/confirm', upload.single('photo'), async (req, res) => {
       report.photos.push({
         url: photoUrl,
         reporterId: userId,
+        reporterUserId: user?._id,
       });
+      
+      // Award points for adding photo
+      if (user) {
+        await user.addPoints('PHOTO_ADDED');
+      }
     }
     
     await report.save();
@@ -274,6 +434,7 @@ router.post('/:id/confirm', upload.single('photo'), async (req, res) => {
       confirmationCount: report.confirmations.length,
       status: report.status,
       isPermanent: report.isPermanent,
+      pointsEarned: user ? (req.file ? 4 : 2) : 0, // CONFIRMATION_GIVEN + optional PHOTO_ADDED
     });
   } catch (error) {
     console.error('Error confirming report:', error);

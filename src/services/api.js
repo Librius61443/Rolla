@@ -4,14 +4,8 @@
  */
 
 import * as FileSystem from 'expo-file-system';
-
-// Configuration - change this to your backend URL
-// For physical devices/simulators, use your computer's local IP address
-// Find it by running: ipconfig (Windows) or ifconfig/ip addr (Mac/Linux)
-// Example: 'http://192.168.1.100:3000/api'
-const API_BASE_URL = __DEV__ 
-  ? 'http://172.20.10.2:3000/api'  // Your computer's local IP
-  : 'https://your-production-url.com/api';
+import { getAuthHeaders } from './auth';
+import { API_BASE_URL } from '../config/api';
 
 // Generate a simple device ID for user tracking
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -35,6 +29,9 @@ const getUserId = async () => {
     return 'anonymous';
   }
 };
+
+// Export device ID for use in components
+export const getDeviceUserId = getUserId;
 
 /**
  * Fetch nearby accessibility reports
@@ -89,6 +86,7 @@ export const fetchReport = async (reportId) => {
 export const createReport = async (type, longitude, latitude, photoUri) => {
   try {
     const userId = await getUserId();
+    const authHeaders = await getAuthHeaders();
     
     // Create form data for multipart upload
     const formData = new FormData();
@@ -112,6 +110,7 @@ export const createReport = async (type, longitude, latitude, photoUri) => {
       headers: {
         'Content-Type': 'multipart/form-data',
         'x-user-id': userId,
+        ...authHeaders,
       },
       body: formData,
     });
@@ -136,6 +135,7 @@ export const createReport = async (type, longitude, latitude, photoUri) => {
 export const confirmReport = async (reportId, photoUri = null) => {
   try {
     const userId = await getUserId();
+    const authHeaders = await getAuthHeaders();
     
     const formData = new FormData();
     
@@ -156,6 +156,7 @@ export const confirmReport = async (reportId, photoUri = null) => {
       headers: {
         ...(photoUri ? { 'Content-Type': 'multipart/form-data' } : {}),
         'x-user-id': userId,
+        ...authHeaders,
       },
       body: photoUri ? formData : undefined,
     });
@@ -201,6 +202,50 @@ export const reportRemoval = async (reportId) => {
 };
 
 /**
+ * Add a photo to an existing report
+ * @param {string} reportId
+ * @param {string} photoUri - Local URI of the photo
+ */
+export const addPhotoToReport = async (reportId, photoUri) => {
+  try {
+    const userId = await getUserId();
+    const authHeaders = await getAuthHeaders();
+    
+    const formData = new FormData();
+    
+    const filename = photoUri.split('/').pop();
+    const match = /\.(\w+)$/.exec(filename);
+    const fileType = match ? `image/${match[1]}` : 'image/jpeg';
+    
+    formData.append('photo', {
+      uri: photoUri,
+      name: filename || 'photo.jpg',
+      type: fileType,
+    });
+    
+    const response = await fetch(`${API_BASE_URL}/reports/${reportId}/add-photo`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'x-user-id': userId,
+        ...authHeaders,
+      },
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to add photo');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error adding photo to report:', error);
+    throw error;
+  }
+};
+
+/**
  * Report a photo as inappropriate
  * @param {string} reportId
  * @param {number} photoIndex
@@ -227,6 +272,41 @@ export const reportBadPhoto = async (reportId, photoIndex, reason) => {
     return await response.json();
   } catch (error) {
     console.error('Error reporting photo:', error);
+    throw error;
+  }
+};
+
+/**
+ * Claim reports created with this device and link them to the user's account
+ * Call this after registration/login to claim orphaned reports
+ */
+export const claimDeviceReports = async () => {
+  try {
+    const deviceId = await getUserId();
+    const authHeaders = await getAuthHeaders();
+    
+    // Only attempt if user is authenticated
+    if (!authHeaders.Authorization) {
+      return { claimedCount: 0 };
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/auth/claim-reports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify({ deviceId }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to claim reports');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error claiming reports:', error);
     throw error;
   }
 };

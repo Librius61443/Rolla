@@ -17,11 +17,35 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../styles/theme';
+import { useAuth } from '../contexts/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchReport, confirmReport, reportRemoval, reportBadPhoto } from '../services/api';
+import { fetchReport, confirmReport, reportRemoval, reportBadPhoto, addPhotoToReport, getDeviceUserId } from '../services/api';
+import { getCurrentCoordinates } from '../services/location';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Format points with commas (e.g., 10000 -> 10,000)
+const formatPoints = (points) => {
+  return points?.toLocaleString() || '0';
+};
+
+// Distance threshold in meters to allow adding photos
+const PHOTO_DISTANCE_THRESHOLD = 50;
+
+// Calculate distance between two coordinates in meters (Haversine formula)
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000; // Earth's radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
 
 // Report type labels and icons
 const REPORT_TYPES = {
@@ -39,20 +63,64 @@ const REPORT_TYPES = {
   'service_animal': { icon: 'paw', label: 'Service Animal OK' },
 };
 
-export default function ReportDetailModal({ visible, reportId, onClose, onReportUpdated }) {
+export default function ReportDetailModal({ visible, reportId, onClose, onReportUpdated, onNavigate }) {
   const { colors } = useTheme();
+  const { user, refreshUser } = useAuth();
   const insets = useSafeAreaInsets();
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [isNearby, setIsNearby] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [deviceUserId, setDeviceUserId] = useState(null);
+
+  // Load device user ID on mount
+  useEffect(() => {
+    getDeviceUserId().then(setDeviceUserId);
+  }, []);
+
+  // Check if current user is the creator (compare by user account _id, username, or device ID)
+  const isOwnReport = report && (
+    // Check by authenticated user
+    (user && report.creator?._id && (report.creator._id === user._id || report.creator._id === user.id)) ||
+    (user && report.creator?.username && report.creator.username === user.username) ||
+    // Check by device ID
+    (deviceUserId && report.creatorId && report.creatorId === deviceUserId)
+  );
 
   useEffect(() => {
     if (visible && reportId) {
       loadReport();
+      checkUserLocation();
     } else {
       setReport(null);
+      setIsNearby(false);
     }
   }, [visible, reportId]);
+
+  const checkUserLocation = async () => {
+    try {
+      const coords = await getCurrentCoordinates();
+      if (coords) {
+        setUserLocation(coords);
+      }
+    } catch (error) {
+      console.error('Error getting location:', error);
+    }
+  };
+
+  // Check if user is near the report location
+  useEffect(() => {
+    if (report && userLocation) {
+      const distance = calculateDistance(
+        userLocation.latitude,
+        userLocation.longitude,
+        report.location.latitude,
+        report.location.longitude
+      );
+      setIsNearby(distance <= PHOTO_DISTANCE_THRESHOLD);
+    }
+  }, [report, userLocation]);
 
   const loadReport = async () => {
     setLoading(true);
@@ -74,12 +142,51 @@ export default function ReportDetailModal({ visible, reportId, onClose, onReport
       await confirmReport(reportId);
       Alert.alert('Thank You!', 'Your confirmation has been recorded.');
       if (onReportUpdated) onReportUpdated();
+      if (refreshUser) refreshUser(); // Update user points/stats
       await loadReport(); // Reload to show updated count
     } catch (error) {
       console.error('Error confirming report:', error);
       Alert.alert('Error', 'Failed to confirm report');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleAddPhoto = async () => {
+    try {
+      // Request camera permissions
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Camera permission is needed to add photos.');
+        return;
+      }
+
+      // Launch camera
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        allowsEditing: true,
+        aspect: [4, 3],
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setActionLoading(true);
+        try {
+          await addPhotoToReport(reportId, result.assets[0].uri);
+          Alert.alert('Success!', 'Photo added successfully! You earned 2 points.');
+          if (onReportUpdated) onReportUpdated();
+          if (refreshUser) refreshUser(); // Update user points/stats
+          await loadReport(); // Reload to show the new photo
+        } catch (error) {
+          console.error('Error adding photo:', error);
+          Alert.alert('Error', 'Failed to add photo. Please try again.');
+        } finally {
+          setActionLoading(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error launching camera:', error);
+      Alert.alert('Error', 'Failed to open camera');
     }
   };
 
@@ -166,8 +273,8 @@ export default function ReportDetailModal({ visible, reportId, onClose, onReport
           </View>
         ) : report ? (
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Photo */}
-            {report.photos && report.photos.length > 0 && report.photos[0].url && (
+            {/* Photo or Add Photo prompt */}
+            {report.photos && report.photos.length > 0 && report.photos[0].url ? (
               <View style={styles.photoContainer}>
                 <Image
                   source={{ uri: report.photos[0].url }}
@@ -181,6 +288,36 @@ export default function ReportDetailModal({ visible, reportId, onClose, onReport
                   <Ionicons name="flag-outline" size={16} color={colors.textMuted} />
                 </Pressable>
               </View>
+            ) : (
+              <View style={[styles.noPhotoContainer, { backgroundColor: colors.inputBg }]}>
+                <Ionicons name="image-outline" size={48} color={colors.textMuted} />
+                <Text style={[styles.noPhotoText, { color: colors.textMuted }]}>
+                  No photo available
+                </Text>
+                {isNearby ? (
+                  <Pressable
+                    onPress={handleAddPhoto}
+                    disabled={actionLoading}
+                    style={({ pressed }) => [
+                      styles.addPhotoButton,
+                      { backgroundColor: pressed ? colors.accentDark : colors.accent },
+                    ]}
+                  >
+                    {actionLoading ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <>
+                        <Ionicons name="camera" size={20} color="#ffffff" />
+                        <Text style={styles.addPhotoButtonText}>Add Photo (+2 pts)</Text>
+                      </>
+                    )}
+                  </Pressable>
+                ) : (
+                  <Text style={[styles.nearbyHint, { color: colors.textMuted }]}>
+                    Get within 50m to add a photo
+                  </Text>
+                )}
+              </View>
             )}
 
             {/* Type Info */}
@@ -191,6 +328,26 @@ export default function ReportDetailModal({ visible, reportId, onClose, onReport
               <Text style={[styles.typeLabel, { color: colors.text }]}>
                 {typeInfo.label}
               </Text>
+            </View>
+
+            {/* Creator Info */}
+            <View style={[styles.creatorContainer, { backgroundColor: colors.inputBg }]}>
+              <View style={[styles.creatorAvatar, { backgroundColor: colors.accent }]}>
+                <Text style={styles.creatorAvatarText}>
+                  {report.creator ? report.creator.username.charAt(0).toUpperCase() : 'C'}
+                </Text>
+              </View>
+              <View style={styles.creatorInfo}>
+                <Text style={[styles.creatorName, { color: colors.text }]}>
+                  {report.creator ? report.creator.username : 'Community'}
+                  <Text style={[styles.creatorPoints, { color: colors.textMuted }]}>
+                    {report.creator ? ` | ${formatPoints(report.creator.points)}` : ''}
+                  </Text>
+                </Text>
+                <Text style={[styles.creatorLevel, { color: colors.textMuted }]}>
+                  {report.creator ? report.creator.level : 'Seeded data'}
+                </Text>
+              </View>
             </View>
 
             {/* Status */}
@@ -216,22 +373,58 @@ export default function ReportDetailModal({ visible, reportId, onClose, onReport
 
             {/* Actions */}
             <View style={styles.actionsContainer}>
+              {/* Navigate Button */}
+              {onNavigate && (
+                <Pressable
+                  onPress={() => {
+                    onNavigate([report.location.longitude, report.location.latitude]);
+                    onClose();
+                  }}
+                  style={({ pressed }) => [
+                    styles.actionButton,
+                    styles.navigateButton,
+                    { 
+                      backgroundColor: pressed ? colors.success : 'transparent',
+                      borderColor: colors.success,
+                    },
+                  ]}
+                >
+                  <Ionicons 
+                    name="navigate" 
+                    size={24} 
+                    color={colors.success} 
+                  />
+                  <Text style={[styles.actionText, { color: colors.success }]}>
+                    Get Directions
+                  </Text>
+                </Pressable>
+              )}
+
               <Pressable
                 onPress={handleConfirm}
-                disabled={actionLoading}
+                disabled={actionLoading || isOwnReport}
                 style={({ pressed }) => [
                   styles.actionButton,
                   styles.confirmButton,
-                  { backgroundColor: pressed ? colors.accentDark : colors.accent },
+                  isOwnReport 
+                    ? { backgroundColor: colors.border }
+                    : { backgroundColor: pressed ? colors.accentDark : colors.accent },
                 ]}
               >
                 {actionLoading ? (
                   <ActivityIndicator size="small" color={colors.secondary} />
                 ) : (
                   <>
-                    <Ionicons name="checkmark-circle" size={24} color={colors.secondary} />
-                    <Text style={[styles.actionText, { color: colors.secondary }]}>
-                      Confirm It's Here
+                    <Ionicons 
+                      name="checkmark-circle" 
+                      size={24} 
+                      color={isOwnReport ? colors.textMuted : colors.secondary} 
+                    />
+                    <Text style={[
+                      styles.actionText, 
+                      { color: isOwnReport ? colors.textMuted : colors.secondary }
+                    ]}>
+                      {isOwnReport ? 'Your Report' : "Confirm It's Here"}
                     </Text>
                   </>
                 )}
@@ -258,7 +451,7 @@ export default function ReportDetailModal({ visible, reportId, onClose, onReport
 
             {/* Info */}
             <Text style={[styles.infoText, { color: colors.textMuted }]}>
-              Reports with 10+ confirmations become permanent. Reports are removed after 10 people confirm removal.
+              Reports with many confirmations become permanent. Reports are removed after many people confirm removal.
             </Text>
           </ScrollView>
         ) : null}
@@ -321,6 +514,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  noPhotoContainer: {
+    width: '100%',
+    height: SCREEN_WIDTH * 0.5,
+    borderRadius: 16,
+    marginBottom: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  noPhotoText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  addPhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+    marginTop: 8,
+  },
+  addPhotoButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  nearbyHint: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
   typeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -337,6 +562,41 @@ const styles = StyleSheet.create({
   typeLabel: {
     fontSize: 24,
     fontWeight: '700',
+  },
+  creatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  creatorAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  creatorAvatarText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  creatorInfo: {
+    flex: 1,
+  },
+  creatorName: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  creatorPoints: {
+    fontSize: 15,
+    fontWeight: '400',
+  },
+  creatorLevel: {
+    fontSize: 13,
+    marginTop: 2,
   },
   statusContainer: {
     flexDirection: 'row',
@@ -371,6 +631,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 14,
     gap: 8,
+  },
+  navigateButton: {
+    borderWidth: 2,
   },
   confirmButton: {},
   removeButton: {

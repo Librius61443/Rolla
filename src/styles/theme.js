@@ -8,7 +8,7 @@ import { Animated, StatusBar, Platform, useColorScheme } from 'react-native';
 
 // Dark theme colors
 export const darkColors = {
-  primary: '#2a1a3a',
+  primary: '#3c3d41',
   secondary: '#252525',
   tertiary: '#3a475a',
   accent: '#7789ff',
@@ -18,7 +18,7 @@ export const darkColors = {
   text: '#ffffff',
   textMuted: '#8e93cb',
   textDark: '#2a1a3a',
-  border: '#1e1f43',
+  border: '#2e2e31',
   cardBg: '#3b3b3b',
   inputBg: '#3b3b3b',
   error: '#ff4757',
