@@ -26,13 +26,14 @@ export default function CameraScreen() {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   }
 
+  // Inside your takePicture function in CameraScreen.js
   const takePicture = async () => {
-    if (cameraRef.current) {
-      const options = { quality: 1, base64: true, exif: false };
-      const data = await cameraRef.current.takePictureAsync(options);
-      setPhoto(data);
+    if (cameraRef) {
+        const photo = await cameraRef.takePictureAsync();
+        // Send the URI back to the reports screen
+        navigation.navigate('Saved Reports', { capturedPhoto: photo.uri });
     }
-  };
+};
 
   // UI for Photo Preview
   if (photo) {
