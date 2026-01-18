@@ -1,18 +1,19 @@
-import { Ionicons } from '@expo/vector-icons';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import * as React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
-// Screens
-import CalendarScreen from './screens/CalendarScreen';
-import HomeScreen from './screens/HomeScreen';
+// Fix: Import names must match the files in your sidebar
+import MapScreen from './screens/MapScreen';
+import SavedPinsScreen from './screens/SavedPinsScreen';
 import SettingsScreen from './screens/SettingsScreen';
-import CameraScreen from './screens/CameraScreen'; //
+import CameraScreen from './screens/CameraScreen';
 
-//Screen names
-const homeName = "Maps";
-const calendarName = "Schedule";
+// Human-friendly labels for your demo
+const mapName = "Map";
+const savedPinsName = "Saved Reports";
 const settingsName = "Settings";
-const cameraName = "Camera"; // Added new constant
+const cameraName = "Camera";
 
 const Tab = createBottomTabNavigator();
 
@@ -20,36 +21,35 @@ function MainContainer() {
   return (
     <NavigationContainer>
       <Tab.Navigator
-        initialRouteName={homeName}
+        initialRouteName={mapName}
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
             let iconName;
             let rn = route.name;
 
-            if (rn === homeName) {
-              iconName = focused ? 'home' : 'home-outline';
-            } else if (rn === calendarName) {
-              iconName = focused ? 'calendar' : 'calendar-outline';
+            if (rn === mapName) {
+              iconName = focused ? 'map' : 'map-outline';
+            } else if (rn === savedPinsName) {
+              iconName = focused ? 'list' : 'list-outline';
             } else if (rn === settingsName) {
               iconName = focused ? 'settings' : 'settings-outline';
             } else if (rn === cameraName) {
-              // Added icon logic for Camera
               iconName = focused ? 'camera' : 'camera-outline';
             }
 
             return <Ionicons name={iconName} size={size} color={color} />;
           },
-          tabBarActiveTintColor: 'blue',
+          tabBarActiveTintColor: '#007bff',
           tabBarInactiveTintColor: 'grey',
-          tabBarLabelStyle: { paddingBottom: 5, fontSize: 10 },
-          tabBarStyle: { padding: 3, height: 100 },
-        })}
-      >
-        <Tab.Screen name={homeName} component={HomeScreen} />
-        <Tab.Screen name={calendarName} component={CalendarScreen} />
-        {/* Added the Camera Screen to the Navigator */}
-        <Tab.Screen name={cameraName} component={CameraScreen} /> 
+          tabBarLabelStyle: { paddingBottom: 10, fontSize: 10 },
+          tabBarStyle: { padding: 10, height: 70 }
+        })}>
+
+        <Tab.Screen name={mapName} component={MapScreen} />
+        <Tab.Screen name={savedPinsName} component={SavedPinsScreen} />
+        <Tab.Screen name={cameraName} component={CameraScreen} />
         <Tab.Screen name={settingsName} component={SettingsScreen} />
+
       </Tab.Navigator>
     </NavigationContainer>
   );
