@@ -11,6 +11,7 @@ const path = require('path');
 
 const reportRoutes = require('./routes/reports');
 const authRoutes = require('./routes/auth');
+const visionRoutes = require('./routes/vision');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -26,6 +27,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Routes
 app.use('/api/reports', reportRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/vision', visionRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

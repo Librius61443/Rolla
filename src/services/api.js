@@ -310,3 +310,26 @@ export const claimDeviceReports = async () => {
     throw error;
   }
 };
+
+export const summarizeImage = async (photoUri) => {
+  const authHeaders = await getAuthHeaders();
+
+  const formData = new FormData();
+  formData.append("photo", {
+    uri: photoUri,
+    name: "photo.jpg",
+    type: "image/jpeg",
+  });
+
+  const res = await fetch(`${API_BASE_URL}/vision/summarize`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "multipart/form-data",
+      ...authHeaders, // ✅ THIS IS THE KEY LINE
+    },
+    body: formData,
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+};

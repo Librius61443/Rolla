@@ -21,7 +21,7 @@ import { useTheme } from '../styles/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CameraCapture from './CameraCapture';
-import { createReport } from '../services/api';
+import { createReport, summarizeImage } from '../services/api';
 import { getCurrentCoordinates } from '../services/location';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -240,12 +240,35 @@ export default function AccessibilityReportSheet({ visible, onClose, onReport })
 
       // Submit report to backend in the background
       try {
-        const result = await createReport(
-          selectedItem,
-          location.longitude,
-          location.latitude,
-          photoUri
-        );
+        let summary = "";
+
+        const aiResult = await summarizeImage(photoUri);
+
+        console.log("AI RESULT:", aiResult);
+
+      if (!aiResult?.is_relevant) {
+        console.log("Blocked: Not accessibility-related");
+        return;
+      }
+
+      if ((aiResult?.confidence ?? 0) < 80) {
+        console.log("Blocked: Low confidence", aiResult.confidence);
+        return;
+      }
+
+      // ✅ Only reaches here if confidence >= 80 AND relevant
+      console.log("Uploading report — confidence OK");
+
+      await createReport(
+        selectedItem,
+        location.longitude,
+        location.latitude,
+        photoUri,
+        aiResult // optional: pass AI data later
+      );
+
+  // Optional: if you don't want to modify createReport backend yet,
+  // just ignore passing summary and only use it locally.
 
         // Update with real report data (parent will refresh)
         if (onReport && result) {
