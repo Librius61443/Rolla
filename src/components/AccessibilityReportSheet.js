@@ -13,10 +13,15 @@ import {
   Dimensions,
   ScrollView,
   PanResponder,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../styles/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import CameraCapture from './CameraCapture';
+import { createReport } from '../services/api';
+import { getCurrentCoordinates } from '../services/location';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -45,6 +50,8 @@ export default function AccessibilityReportSheet({ visible, onClose, onReport })
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(SNAP_BOTTOM)).current;
   const [selectedItem, setSelectedItem] = useState(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Animation values for each item
   const itemAnimations = useRef(
@@ -177,11 +184,58 @@ export default function AccessibilityReportSheet({ visible, onClose, onReport })
   };
 
   const handleSubmit = () => {
-    if (selectedItem && onReport) {
-      onReport(selectedItem);
+    if (selectedItem) {
+      // Show camera to capture photo
+      setShowCamera(true);
+    }
+  };
+
+  const handlePhotoCapture = async (photoUri) => {
+    setShowCamera(false);
+    setIsSubmitting(true);
+
+    try {
+      // Get current location
+      const location = await getCurrentCoordinates();
+      
+      if (!location) {
+        Alert.alert('Error', 'Unable to get your location. Please try again.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Submit report to backend
+      const result = await createReport(
+        selectedItem,
+        location.longitude,
+        location.latitude,
+        photoUri
+      );
+
+      // Notify parent of new report
+      if (onReport) {
+        onReport(result);
+      }
+      
+      Alert.alert(
+        'Thank You!', 
+        result.isConfirmation 
+          ? 'Your confirmation has been added to an existing report.'
+          : 'Your accessibility report has been submitted.',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Error submitting report:', error);
+      Alert.alert('Error', 'Failed to submit report. Please try again.');
+    } finally {
+      setIsSubmitting(false);
       setSelectedItem(null);
       handleClose();
     }
+  };
+
+  const handleCameraClose = () => {
+    setShowCamera(false);
   };
 
   // Split items into rows of 3
@@ -316,11 +370,11 @@ export default function AccessibilityReportSheet({ visible, onClose, onReport })
       >
         <Pressable
           onPress={handleSubmit}
-          disabled={!selectedItem}
+          disabled={!selectedItem || isSubmitting}
           style={({ pressed }) => [
             styles.submitButton,
             {
-              backgroundColor: selectedItem
+              backgroundColor: selectedItem && !isSubmitting
                 ? pressed
                   ? colors.accentDark
                   : colors.accent
@@ -328,21 +382,44 @@ export default function AccessibilityReportSheet({ visible, onClose, onReport })
             },
           ]}
         >
-          <Ionicons
-            name="location"
-            size={20}
-            color={selectedItem ? colors.secondary : colors.textMuted}
-          />
-          <Text
-            style={[
-              styles.submitText,
-              { color: selectedItem ? colors.secondary : colors.textMuted },
-            ]}
-          >
-            Drop Pin at Current Location
-          </Text>
+          {isSubmitting ? (
+            <>
+              <ActivityIndicator size="small" color={colors.secondary} />
+              <Text
+                style={[
+                  styles.submitText,
+                  { color: colors.secondary },
+                ]}
+              >
+                Submitting...
+              </Text>
+            </>
+          ) : (
+            <>
+              <Ionicons
+                name="camera"
+                size={20}
+                color={selectedItem ? colors.secondary : colors.textMuted}
+              />
+              <Text
+                style={[
+                  styles.submitText,
+                  { color: selectedItem ? colors.secondary : colors.textMuted },
+                ]}
+              >
+                Take Photo & Report
+              </Text>
+            </>
+          )}
         </Pressable>
       </Animated.View>
+
+      {/* Camera Capture Modal */}
+      <CameraCapture
+        visible={showCamera}
+        onCapture={handlePhotoCapture}
+        onClose={handleCameraClose}
+      />
     </>
   );
 }

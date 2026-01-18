@@ -10,7 +10,7 @@ import { Magnetometer } from 'expo-sensors';
 import { getCurrentCoordinates } from '../services/location';
 import { useTheme, darkMapTheme, lightMapTheme } from '../styles/theme';
 
-export default function MapboxMap({ is3D = true, onMapReady }) {
+export default function MapboxMap({ is3D = true, onMapReady, reports = [], onReportClick }) {
   const { isDark, mapTheme, colors } = useTheme();
   const [initialCoords, setInitialCoords] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -95,6 +95,17 @@ export default function MapboxMap({ is3D = true, onMapReady }) {
     }
   }, [isDark, mapReady]);
 
+  // Update report markers when reports change - only after map is ready
+  useEffect(() => {
+    if (webViewRef.current && mapReady && reports) {
+      const reportsJson = JSON.stringify(reports);
+      webViewRef.current.injectJavaScript(`
+        window.updateReports && window.updateReports(${reportsJson});
+        true;
+      `);
+    }
+  }, [reports, mapReady]);
+
   // Memoize HTML content so it only changes when coords change (theme handled via injection)
   const htmlContent = useMemo(() => {
     if (!initialCoords) return '';
@@ -167,6 +178,7 @@ export default function MapboxMap({ is3D = true, onMapReady }) {
             map.on('style.load', function() {
               addMapLayers();
               add3DChevronMarker();
+              addReportMarkers();
               // Apply theme colors immediately 
               applyThemeColors();
               // Re-apply after tiles load to override Mapbox defaults
@@ -372,6 +384,143 @@ export default function MapboxMap({ is3D = true, onMapReady }) {
               getChevronHeight,
               updateChevron
             };
+          }
+
+          // Report type to icon mapping (using ionicons style names)
+          const REPORT_ICONS = {
+            'elevator': '🛗',
+            'ramp': '↗️',
+            'accessible_table': '☕',
+            'wheelchair_entrance': '🚪',
+            'accessible_parking': '🅿️',
+            'accessible_restroom': '🚻',
+            'braille_signage': '✋',
+            'audio_signals': '🔊',
+            'lowered_counter': '📏',
+            'automatic_doors': '🚶',
+            'tactile_paving': '👣',
+            'service_animal': '🐕'
+          };
+
+          function addReportMarkers() {
+            const theme = getTheme();
+            
+            // Add source for reports
+            if (!map.getSource('reports')) {
+              map.addSource('reports', {
+                'type': 'geojson',
+                'data': {
+                  'type': 'FeatureCollection',
+                  'features': []
+                }
+              });
+            }
+
+            // Report marker background circle
+            if (!map.getLayer('report-markers-bg')) {
+              map.addLayer({
+                'id': 'report-markers-bg',
+                'type': 'circle',
+                'source': 'reports',
+                'paint': {
+                  'circle-radius': [
+                    'interpolate', ['linear'], ['zoom'],
+                    12, 12,
+                    16, 18,
+                    20, 24
+                  ],
+                  'circle-color': theme.accent,
+                  'circle-stroke-width': 3,
+                  'circle-stroke-color': '#ffffff'
+                }
+              });
+            }
+
+            // Report marker icon (using symbol layer with text-field)
+            if (!map.getLayer('report-markers-icon')) {
+              map.addLayer({
+                'id': 'report-markers-icon',
+                'type': 'symbol',
+                'source': 'reports',
+                'layout': {
+                  'text-field': ['get', 'icon'],
+                  'text-size': [
+                    'interpolate', ['linear'], ['zoom'],
+                    12, 14,
+                    16, 18,
+                    20, 24
+                  ],
+                  'text-allow-overlap': true,
+                  'text-ignore-placement': true
+                },
+                'paint': {
+                  'text-color': '#ffffff'
+                }
+              });
+            }
+
+            // Click handler for report markers
+            map.on('click', 'report-markers-bg', function(e) {
+              if (e.features.length > 0) {
+                const feature = e.features[0];
+                const reportId = feature.properties.id;
+                const reportType = feature.properties.type;
+                const photoUrl = feature.properties.photoUrl;
+                
+                // Send click event back to React Native
+                if (window.ReactNativeWebView) {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'reportClick',
+                    reportId: reportId,
+                    reportType: reportType,
+                    photoUrl: photoUrl,
+                    coordinates: e.features[0].geometry.coordinates
+                  }));
+                }
+              }
+            });
+
+            // Change cursor on hover
+            map.on('mouseenter', 'report-markers-bg', function() {
+              map.getCanvas().style.cursor = 'pointer';
+            });
+            map.on('mouseleave', 'report-markers-bg', function() {
+              map.getCanvas().style.cursor = '';
+            });
+          }
+
+          // Update reports data from React Native
+          window.updateReports = function(reports) {
+            if (!map || !map.getSource('reports')) return;
+            
+            const features = reports.map(report => ({
+              type: 'Feature',
+              geometry: {
+                type: 'Point',
+                coordinates: report.location.coordinates
+              },
+              properties: {
+                id: report._id,
+                type: report.type,
+                icon: REPORT_ICONS[report.type] || '♿',
+                photoUrl: report.photos && report.photos[0] ? report.photos[0].url : null,
+                confirmations: report.confirmations ? report.confirmations.length : 0,
+                status: report.status
+              }
+            }));
+
+            map.getSource('reports').setData({
+              type: 'FeatureCollection',
+              features: features
+            });
+          };
+
+          // Update report marker colors on theme change
+          function updateReportMarkerTheme() {
+            const theme = getTheme();
+            if (map.getLayer('report-markers-bg')) {
+              map.setPaintProperty('report-markers-bg', 'circle-color', theme.accent);
+            }
           }
 
           function addMapLayers() {
@@ -622,7 +771,9 @@ export default function MapboxMap({ is3D = true, onMapReady }) {
               
               addMapLayers();
               add3DChevronMarker();
+              addReportMarkers();
               applyThemeColors();
+              updateReportMarkerTheme();
               
               // Re-apply colors after a delay to catch tile loads
               setTimeout(function() {
@@ -689,6 +840,14 @@ export default function MapboxMap({ is3D = true, onMapReady }) {
         if (onMapReady) {
           onMapReady();
         }
+      } else if (data.type === 'reportClick' && onReportClick) {
+        // Forward report click to parent
+        onReportClick({
+          reportId: data.reportId,
+          reportType: data.reportType,
+          photoUrl: data.photoUrl,
+          coordinates: data.coordinates,
+        });
       }
     } catch (error) {
       console.error('Error parsing WebView message:', error);

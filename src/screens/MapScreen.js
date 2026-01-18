@@ -3,32 +3,90 @@
  * Main map view with 2D/3D toggle and theme support
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Pressable, StyleSheet, StatusBar, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import MapboxMap from '../components/MapboxMap';
 import MenuButton from '../components/MenuButton';
 import AccessibilityReportSheet from '../components/AccessibilityReportSheet';
+import ReportDetailModal from '../components/ReportDetailModal';
 import { useTheme } from '../styles/theme';
+import { getCurrentCoordinates } from '../services/location';
+import { fetchNearbyReports } from '../services/api';
 
 export default function MapScreen({ onMapReady }) {
   const [is3D, setIs3D] = useState(true);
   const [showAccessibilitySheet, setShowAccessibilitySheet] = useState(false);
+  const [reports, setReports] = useState([]);
+  const [selectedReportId, setSelectedReportId] = useState(null);
+  const [showReportDetail, setShowReportDetail] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
   const { isDark, colors, mapTheme } = useTheme();
+
+  // Fetch user location and reports on mount
+  useEffect(() => {
+    loadLocationAndReports();
+  }, []);
+
+  const loadLocationAndReports = async () => {
+    try {
+      const coords = await getCurrentCoordinates();
+      if (coords) {
+        setUserLocation(coords);
+        await loadReports(coords.longitude, coords.latitude);
+      }
+    } catch (error) {
+      console.error('Error loading location/reports:', error);
+    }
+  };
+
+  const loadReports = useCallback(async (longitude, latitude) => {
+    try {
+      const nearbyReports = await fetchNearbyReports(longitude, latitude, 2000); // 2km radius
+      setReports(nearbyReports);
+    } catch (error) {
+      console.error('Error loading reports:', error);
+      // Silently fail - reports are not critical
+    }
+  }, []);
 
   const toggleView = () => {
     setIs3D(!is3D);
   };
 
-  const handleAccessibilityReport = (itemId) => {
-    // TODO: Handle the accessibility report - save to database, add marker to map, etc.
-    console.log('Accessibility feature reported:', itemId);
+  const handleAccessibilityReport = (newReport) => {
+    // Reload reports when a new one is added
+    if (userLocation) {
+      loadReports(userLocation.longitude, userLocation.latitude);
+    }
+  };
+
+  const handleReportClick = (reportData) => {
+    setSelectedReportId(reportData.reportId);
+    setShowReportDetail(true);
+  };
+
+  const handleReportDetailClose = () => {
+    setShowReportDetail(false);
+    setSelectedReportId(null);
+  };
+
+  const handleReportUpdated = () => {
+    // Reload reports when one is updated
+    if (userLocation) {
+      loadReports(userLocation.longitude, userLocation.latitude);
+    }
   };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-      <MapboxMap is3D={is3D} onMapReady={onMapReady} />
+      <MapboxMap 
+        is3D={is3D} 
+        onMapReady={onMapReady} 
+        reports={reports}
+        onReportClick={handleReportClick}
+      />
       
       {/* Menu Button */}
       <MenuButton />
@@ -82,6 +140,14 @@ export default function MapScreen({ onMapReady }) {
         visible={showAccessibilitySheet}
         onClose={() => setShowAccessibilitySheet(false)}
         onReport={handleAccessibilityReport}
+      />
+
+      {/* Report Detail Modal */}
+      <ReportDetailModal
+        visible={showReportDetail}
+        reportId={selectedReportId}
+        onClose={handleReportDetailClose}
+        onReportUpdated={handleReportUpdated}
       />
     </View>
   );
