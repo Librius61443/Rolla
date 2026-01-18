@@ -1,53 +1,60 @@
-import { useState } from 'react';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
-import Checkbox from 'expo-checkbox';
-import { Text, TouchableOpacity, View } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
-import { styles } from '../../styles/homeStyles';
-
-
-export default function LogItem({ item, checkBox, onDelete, setOnEdit, onEdit}) {
-
-    const [checked, setChecked] = useState(false);
-
-    const renderRightActions = () => (
-        <TouchableOpacity 
-        style={styles.deleteBox} 
-        onPress={() => onDelete(item.id)}   // delete log by id
-        >
-        <Text style={styles.deleteText}>Delete</Text>
-        </TouchableOpacity>
-    );
-
-
-    // const [onEdit, setOnEdit] = useState(false);
-
-    // console.log("checkBox:", checkBox);
+export default function LogItem({ item, onDelete, setOnEdit }) {
+    // We now treat the weight data as 'Quality'
+    const qualityValue = parseInt(item.weight) || 0;
 
     return (
-        <Swipeable renderRightActions={renderRightActions}>
-
-        <View style={styles.logItem}>
-            <View style={{ flexDirection: 'column' }}>
-                <Text style={styles.exercise}>{item.exercise}</Text>
-                <Text style={styles.meta}>{item.reps} reps · {item.weight} lbs</Text>
-            </View>
-
-            {checkBox ? (
-                <View style={{ marginRight: 10 }}>
-                    <Checkbox value={checked} onValueChange={setChecked} />
+        <View style={styles.card}>
+            <View style={styles.mainContent}>
+                <Text style={styles.title}>{item.exercise}</Text>
+                
+                <View style={styles.qualityRow}>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                        <Ionicons 
+                            key={s} 
+                            name={s <= qualityValue ? "star" : "star-outline"} 
+                            size={16} 
+                            color="#f1c40f" 
+                        />
+                    ))}
+                    <Text style={styles.qualityText}> Quality: {qualityValue}/5</Text>
                 </View>
-            ) : null}
-            {onEdit ? (
-                <TouchableOpacity
-                    style={{ paddingVertical: 6, paddingHorizontal: 15 }}
-                    onPress={() => setOnEdit(item.id)}>
+
+                <Text style={styles.description}>{item.reps}</Text>
+            </View>
+            
+            <View style={styles.actionColumn}>
+                <TouchableOpacity onPress={setOnEdit} style={styles.editButton}>
                     <Text style={styles.editText}>Edit</Text>
                 </TouchableOpacity>
-            ) : null}
-               
+                <TouchableOpacity onPress={() => onDelete(item.id)}>
+                    <Ionicons name="trash-outline" size={20} color="#e74c3c" />
+                </TouchableOpacity>
+            </View>
         </View>
-        </Swipeable>
-
     );
 }
+
+const styles = StyleSheet.create({
+    card: { 
+        flexDirection: 'row', 
+        backgroundColor: 'white', 
+        marginHorizontal: 15, 
+        marginVertical: 6, 
+        padding: 12, 
+        borderRadius: 12, 
+        borderWidth: 1, 
+        borderColor: '#efefef' 
+    },
+    mainContent: { flex: 1 },
+    title: { fontSize: 16, fontWeight: 'bold', color: '#2d3436' },
+    qualityRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 4 },
+    qualityText: { fontSize: 12, color: '#636e72', marginLeft: 5, fontWeight: '500' },
+    description: { fontSize: 14, color: '#636e72' },
+    actionColumn: { alignItems: 'flex-end', justifyContent: 'space-between' },
+    editButton: { padding: 5 },
+    editText: { color: '#007bff', fontWeight: '600' }
+});
