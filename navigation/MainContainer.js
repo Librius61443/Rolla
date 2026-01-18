@@ -3,56 +3,40 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
-// Fix: Import names must match the files in your sidebar
+// Verified imports
 import MapScreen from './screens/MapScreen';
 import SavedPinsScreen from './screens/SavedPinsScreen';
-import SettingsScreen from './screens/SettingsScreen';
 import CameraScreen from './screens/CameraScreen';
-
-// Human-friendly labels for your demo
-const mapName = "Map";
-const savedPinsName = "Saved Reports";
-const settingsName = "Settings";
-const cameraName = "Camera";
+import GalleryScreen from './screens/GalleryScreen';
+import SettingsScreen from './screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator();
 
-function MainContainer() {
+export default function MainContainer() {
   return (
     <NavigationContainer>
       <Tab.Navigator
-        initialRouteName={mapName}
+        initialRouteName="Map"
         screenOptions={({ route }) => ({
-          tabBarIcon: ({ focused, color, size }) => {
+          headerShown: true,
+          tabBarActiveTintColor: '#007bff',
+          tabBarIcon: ({ color, size, focused }) => {
             let iconName;
-            let rn = route.name;
-
-            if (rn === mapName) {
-              iconName = focused ? 'map' : 'map-outline';
-            } else if (rn === savedPinsName) {
-              iconName = focused ? 'list' : 'list-outline';
-            } else if (rn === settingsName) {
-              iconName = focused ? 'settings' : 'settings-outline';
-            } else if (rn === cameraName) {
-              iconName = focused ? 'camera' : 'camera-outline';
-            }
-
+            if (route.name === 'Map') iconName = focused ? 'map' : 'map-outline';
+            else if (route.name === 'Saved Reports') iconName = focused ? 'list' : 'list-outline';
+            else if (route.name === 'Camera') iconName = focused ? 'camera' : 'camera-outline';
+            else if (route.name === 'Gallery') iconName = focused ? 'images' : 'images-outline';
+            else if (route.name === 'Settings') iconName = focused ? 'settings' : 'settings-outline';
             return <Ionicons name={iconName} size={size} color={color} />;
           },
-          tabBarActiveTintColor: '#007bff',
-          tabBarInactiveTintColor: 'grey',
-          tabBarLabelStyle: { paddingBottom: 10, fontSize: 10 },
-          tabBarStyle: { padding: 10, height: 70 }
-        })}>
-
-        <Tab.Screen name={mapName} component={MapScreen} />
-        <Tab.Screen name={savedPinsName} component={SavedPinsScreen} />
-        <Tab.Screen name={cameraName} component={CameraScreen} />
-        <Tab.Screen name={settingsName} component={SettingsScreen} />
-
+        })}
+      >
+        <Tab.Screen name="Map" component={MapScreen} />
+        <Tab.Screen name="Saved Reports" component={SavedPinsScreen} />
+        <Tab.Screen name="Camera" component={CameraScreen} />
+        <Tab.Screen name="Gallery" component={GalleryScreen} />
+        <Tab.Screen name="Settings" component={SettingsScreen} />
       </Tab.Navigator>
     </NavigationContainer>
   );
 }
-
-export default MainContainer;

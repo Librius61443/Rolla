@@ -1,107 +1,86 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, ScrollView } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
-export default function LogForm({ onSave, onCancel, initialData, placeholderExercise }) {
-    const [name, setName] = useState('');
-    const [description, setDescription] = useState('');
-    const [quality, setQuality] = useState(0);
+export default function LogForm({ onSave, onCancel, initialData, capturedPhoto }) {
+    const [name, setName] = useState(initialData?.exercise || '');
+    const [desc, setDesc] = useState(initialData?.reps || '');
+    const [quality, setQuality] = useState(parseInt(initialData?.weight) || 0);
+    const [photo, setPhoto] = useState(initialData?.photo || null);
 
-    // Sync form with initialData when Editing
     useEffect(() => {
-        if (initialData) {
-            setName(initialData.exercise);
-            setDescription(initialData.reps);
-            setQuality(parseInt(initialData.weight) || 0);
-        }
-    }, [initialData]);
+        if (capturedPhoto) setPhoto(capturedPhoto);
+    }, [capturedPhoto]);
 
-    const handleSave = () => {
-        if (!name || quality === 0) {
-            alert("Please provide a name and quality rating.");
-            return;
-        }
-
-        onSave({ 
-            exercise: name, 
-            reps: description, 
-            weight: quality.toString() 
+    const pickFromLibrary = async () => {
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            quality: 0.7,
         });
-
-        // Clear fields
-        setName('');
-        setDescription('');
-        setQuality(0);
+        if (!result.canceled) setPhoto(result.assets[0].uri);
     };
 
     return (
-        <View style={styles.formContainer}>
-            <Text style={styles.headerLabel}>
-                {initialData ? "Edit Accessibility Report" : "New Accessibility Report"}
-            </Text>
-            
-            <TextInput 
-                style={styles.input} 
-                placeholder={placeholderExercise || "Location Name"} 
-                value={name} 
-                onChangeText={setName} 
-            />
+        <ScrollView style={styles.container}>
+            <Text style={styles.label}>Location Name</Text>
+            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Location name..." />
 
-            <TextInput 
-                style={[styles.input, styles.textArea]} 
-                placeholder="Describe the accessibility status..." 
-                multiline
-                numberOfLines={3}
-                value={description} 
-                onChangeText={setDescription} 
-            />
-            
-            <View style={styles.qualitySection}>
-                <Text style={styles.label}>Accessibility Quality:</Text>
-                <View style={styles.starRow}>
-                    {[1, 2, 3, 4, 5].map((star) => (
-                        <TouchableOpacity 
-                            key={star} 
-                            onPress={() => setQuality(star)}
-                            activeOpacity={0.7}
-                        >
-                            <Ionicons 
-                                name={star <= quality ? "star" : "star-outline"} 
-                                size={36} 
-                                color={star <= quality ? "#f1c40f" : "#bdc3c7"} 
-                                style={styles.starIcon}
-                            />
+            <Text style={styles.label}>Details</Text>
+            <TextInput style={[styles.input, { height: 80 }]} value={desc} onChangeText={setDesc} multiline placeholder="Describe accessibility..." />
+
+            <Text style={styles.label}>Quality</Text>
+            <View style={styles.starRow}>
+                {[1, 2, 3, 4, 5].map(s => (
+                    <TouchableOpacity key={s} onPress={() => setQuality(s)}>
+                        <Ionicons name={s <= quality ? "star" : "star-outline"} size={35} color="#f1c40f" />
+                    </TouchableOpacity>
+                ))}
+            </View>
+
+            <View style={styles.photoContainer}>
+                <TouchableOpacity onPress={pickFromLibrary} style={styles.photoBtn}>
+                    <Ionicons name="image" size={24} color="#007bff" />
+                    <Text style={styles.photoBtnText}>Library</Text>
+                </TouchableOpacity>
+                
+                {photo ? (
+                    <View style={styles.previewWrapper}>
+                        <Image source={{ uri: photo }} style={styles.preview} />
+                        <TouchableOpacity onPress={() => setPhoto(null)} style={styles.removePhoto}>
+                            <Ionicons name="close-circle" size={24} color="#ff4757" />
                         </TouchableOpacity>
-                    ))}
-                    {quality > 0 && <Text style={styles.ratingText}>{quality}/5</Text>}
-                </View>
+                    </View>
+                ) : (
+                    <Text style={styles.noPhoto}>No photo selected</Text>
+                )}
             </View>
 
             <View style={styles.buttonRow}>
-                <TouchableOpacity onPress={onCancel} style={styles.cancelBtn}>
-                    <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleSave} style={styles.saveBtn}>
-                    <Text style={styles.saveText}>Save Report</Text>
+                <TouchableOpacity onPress={onCancel} style={styles.cancelBtn}><Text>Cancel</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => onSave({ exercise: name, reps: desc, weight: quality.toString(), photo })} style={styles.saveBtn}>
+                    <Text style={styles.saveBtnText}>Save Report</Text>
                 </TouchableOpacity>
             </View>
-        </View>
+        </ScrollView>
     );
 }
 
 const styles = StyleSheet.create({
-    formContainer: { padding: 20, backgroundColor: '#ffffff', borderTopWidth: 1, borderTopColor: '#f1f2f6' },
-    headerLabel: { fontSize: 14, fontWeight: '700', color: '#2f3542', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 },
-    input: { backgroundColor: '#f1f2f6', padding: 12, borderRadius: 8, marginBottom: 12, fontSize: 16, color: '#2f3542' },
-    textArea: { height: 80, textAlignVertical: 'top' },
-    qualitySection: { marginVertical: 10 },
-    label: { fontSize: 15, fontWeight: '600', color: '#57606f', marginBottom: 8 },
-    starRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-    starIcon: { marginRight: 8 },
-    ratingText: { fontSize: 18, fontWeight: 'bold', color: '#f1c40f', marginLeft: 5 },
-    buttonRow: { flexDirection: 'row', justifyContent: 'space-between' },
-    saveBtn: { backgroundColor: '#007bff', padding: 15, borderRadius: 8, flex: 2, marginLeft: 10, alignItems: 'center' },
-    saveText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
-    cancelBtn: { backgroundColor: '#f1f2f6', padding: 15, borderRadius: 8, flex: 1, marginRight: 10, alignItems: 'center' },
-    cancelText: { color: '#57606f', fontWeight: '600' }
+    container: { padding: 15, backgroundColor: '#fff' },
+    label: { fontWeight: 'bold', marginBottom: 5 },
+    input: { backgroundColor: '#f1f2f6', padding: 12, borderRadius: 8, marginBottom: 15 },
+    starRow: { flexDirection: 'row', marginBottom: 20 },
+    photoContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 25, backgroundColor: '#f9f9f9', padding: 15, borderRadius: 10 },
+    photoBtn: { alignItems: 'center', marginRight: 20 },
+    photoBtnText: { color: '#007bff', fontSize: 12, fontWeight: 'bold' },
+    previewWrapper: { position: 'relative' },
+    preview: { width: 70, height: 70, borderRadius: 8 },
+    removePhoto: { position: 'absolute', top: -10, right: -10, backgroundColor: 'white', borderRadius: 12 },
+    noPhoto: { color: '#999', fontStyle: 'italic' },
+    buttonRow: { flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 20 },
+    cancelBtn: { flex: 1, padding: 15, alignItems: 'center' },
+    saveBtn: { flex: 2, backgroundColor: '#007bff', padding: 15, borderRadius: 8, alignItems: 'center' },
+    saveBtnText: { color: 'white', fontWeight: 'bold' }
 });

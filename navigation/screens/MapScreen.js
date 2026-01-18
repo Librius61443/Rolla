@@ -1,76 +1,87 @@
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, Alert, Text, StyleSheet, Image, Platform } from 'react-native';
+import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, View, Text } from 'react-native';
-import MapView, { Marker, Callout } from 'react-native-maps';
-
-// Fix: Correct path to location folder
 import { getCurrentCoordinates } from '../../location/CurrentLocation';
-import { customStyleJson } from '../../styles/mapStyles';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+
+const getCategoryColor = (category) => {
+    switch (category) {
+        case 'Ramps': return '#007bff';
+        case 'Washrooms': return '#28a745';
+        case 'Elevator': return '#fd7e14';
+        case 'Auto-Doors': return '#6f42c1';
+        default: return '#ff4444';
+    }
+};
 
 export default function MapScreen({ navigation }) {
-    const [initialRegion, setInitialRegion] = useState(null);
-    const [savedPins, setSavedPins] = useState([]);
+    const [region, setRegion] = useState(null);
+    const [pins, setPins] = useState([]);
 
     useEffect(() => {
         (async () => {
             const coords = await getCurrentCoordinates();
-            if (coords) {
-                setInitialRegion({
-                    ...coords,
-                    latitudeDelta: 0.01,
-                    longitudeDelta: 0.01,
-                });
-            }
+            if (coords) setRegion({ ...coords, latitudeDelta: 0.01, longitudeDelta: 0.01 });
         })();
     }, []);
 
-    useFocusEffect(
-        useCallback(() => {
-            const loadMarkers = async () => {
-                const data = await AsyncStorage.getItem('saved_pins');
-                if (data) setSavedPins(JSON.parse(data));
-            };
-            loadMarkers();
-        }, [])
-    );
+    useFocusEffect(useCallback(() => {
+        const load = async () => {
+            const data = await AsyncStorage.getItem('saved_pins');
+            if (data) setPins(JSON.parse(data));
+        };
+        load();
+    }, []));
 
     const handleLongPress = (e) => {
         const coords = e.nativeEvent.coordinate;
-        Alert.alert(
-            "New Accessibility Report",
-            "Document a feature or obstacle at this location?",
-            [
-                { text: "Cancel", style: "cancel" },
-                { 
-                    text: "Create Report", 
-                    // Fix: Must match the string in MainContainer.js
-                    onPress: () => navigation.navigate('Saved Reports', { currentCoords: coords }) 
-                }
-            ]
-        );
+        Alert.alert("New Report", "Document this location?", [
+            { text: "Cancel" },
+            { text: "Create", onPress: () => navigation.navigate('Saved Reports', { currentCoords: coords }) }
+        ]);
     };
 
     return (
         <View style={{ flex: 1 }}>
-            <MapView
-                provider='google'
-                style={{ flex: 1 }}
-                initialRegion={initialRegion}
-                customMapStyle={customStyleJson}
+            <MapView 
+                provider={PROVIDER_GOOGLE}
+                style={{ flex: 1 }} 
+                region={region} 
                 onLongPress={handleLongPress}
+                showsUserLocation={true}
             >
-                {savedPins.map((pin) => (
+                {pins.map(p => (
                     <Marker 
-                        key={pin.id} 
-                        coordinate={pin.coords}
-                        pinColor={pin.categoryId === 'ramps' ? '#007bff' : '#e74c3c'}
+                        key={p.id} 
+                        coordinate={p.coords} 
+                        pinColor={getCategoryColor(p.section)}
                     >
-                        <Callout>
-                            <View style={{ padding: 10, maxWidth: 200 }}>
-                                <Text style={{ fontWeight: 'bold' }}>{pin.exercise}</Text>
-                                <Text>{pin.reps}</Text>
-                                <Text style={{ color: '#007bff' }}>Rating: {pin.weight}/5</Text>
+                        <Callout onPress={() => navigation.navigate('Saved Reports', { editId: p.id })}>
+                            <View style={styles.calloutContainer}>
+                                {p.photo && (
+                                    <Image 
+                                        source={{ uri: p.photo }} 
+                                        style={styles.calloutImage}
+                                        onLoad={() => {}} 
+                                    />
+                                )}
+                                <Text style={styles.calloutTitle}>{p.title || "Untitled"}</Text>
+                                <Text style={[styles.calloutCategory, { color: getCategoryColor(p.section) }]}>
+                                    {p.section}
+                                </Text>
+                                <View style={styles.starRow}>
+                                    {[1, 2, 3, 4, 5].map((s) => (
+                                        <Ionicons 
+                                            key={s} 
+                                            name={s <= (p.rating || 0) ? "star" : "star-outline"} 
+                                            size={12} 
+                                            color="#FFD700" 
+                                        />
+                                    ))}
+                                </View>
+                                <Text style={styles.tapTip}>Tap to view full report</Text>
                             </View>
                         </Callout>
                     </Marker>
@@ -79,3 +90,12 @@ export default function MapScreen({ navigation }) {
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    calloutContainer: { width: 180, padding: 5, alignItems: 'center', backgroundColor: 'white' },
+    calloutImage: { width: 170, height: 100, borderRadius: 8, marginBottom: 8, backgroundColor: '#eee' },
+    calloutTitle: { fontWeight: 'bold', fontSize: 14, textAlign: 'center' },
+    calloutCategory: { fontSize: 12, fontWeight: '600', marginVertical: 2 },
+    starRow: { flexDirection: 'row', marginBottom: 4 },
+    tapTip: { fontSize: 10, color: '#999', fontStyle: 'italic', marginTop: 4 }
+});

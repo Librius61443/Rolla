@@ -1,162 +1,223 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Alert, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { 
+    View, Text, FlatList, StyleSheet, TouchableOpacity, 
+    Alert, TextInput, ScrollView, KeyboardAvoidingView, 
+    Platform, Image, Modal, SafeAreaView 
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import LogForm from '../components/LogForm';
-import LogItem from '../components/LogItem';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import * as ImagePicker from 'expo-image-picker';
+
+// Updated icon for Ramps to trending-up (slope)
+const SECTIONS = [
+    { name: 'Ramps', icon: 'trending-up-outline', color: '#007bff' },
+    { name: 'Washrooms', icon: 'woman-outline', color: '#28a745' },
+    { name: 'Elevator', icon: 'business-outline', color: '#fd7e14' },
+    { name: 'Auto-Doors', icon: 'exit-outline', color: '#6f42c1' }
+];
 
 export default function SavedPinsScreen({ navigation, route }) {
-    const [pins, setPins] = useState([]);
-    const [activeCategory, setActiveCategory] = useState(null);
-    const [editingPin, setEditingPin] = useState(null);
+    const [savedPins, setSavedPins] = useState([]);
+    const [isFormVisible, setIsFormVisible] = useState(false);
+    const [editingId, setEditingId] = useState(null);
+    
+    const [title, setTitle] = useState("");
+    const [description, setDescription] = useState("");
+    const [selectedSection, setSelectedSection] = useState("");
+    const [customCategory, setCustomCategory] = useState("");
+    const [rating, setRating] = useState(0);
+    const [selectedPhoto, setSelectedPhoto] = useState(null);
+    const [currentCoords, setCurrentCoords] = useState(null);
 
-    const categories = [
-        { id: 'ramps', label: 'Ramps and Entrances' },
-        { id: 'elevators', label: 'Elevators and Lifts' },
-        { id: 'washrooms', label: 'Accessible Washrooms' },
-        { id: 'parking', label: 'Designated Parking' },
-    ];
+    const [appGallery, setAppGallery] = useState([]);
+    const [showAppGallery, setShowAppGallery] = useState(false);
 
-    // Load saved pins whenever the screen comes into focus
+    // Payload listener from MapScreen
     useFocusEffect(
         useCallback(() => {
-            const fetchPins = async () => {
-                const stored = await AsyncStorage.getItem('saved_pins');
-                if (stored) setPins(JSON.parse(stored));
+            const sync = async () => {
+                const data = await AsyncStorage.getItem('saved_pins');
+                const all = data ? JSON.parse(data) : [];
+                setSavedPins(all);
+
+                if (route.params?.editId) {
+                    const target = all.find(p => p.id === route.params.editId);
+                    if (target) startEdit(target);
+                    navigation.setParams({ editId: null });
+                }
+
+                if (route.params?.currentCoords) {
+                    resetFormState();
+                    setCurrentCoords(route.params.currentCoords);
+                    setIsFormVisible(true);
+                    navigation.setParams({ currentCoords: null });
+                }
             };
-            fetchPins();
-        }, [])
+            sync();
+        }, [route.params])
     );
 
-    // Integrated handleSave logic
-    const handleSave = async (formData) => {
-        let updatedPins;
-        const capturedPhoto = route.params?.capturedPhoto;
-
-        if (editingPin) {
-            // EDIT LOGIC
-            updatedPins = pins.map(p => p.id === editingPin.id ? { 
-                ...p, 
-                ...formData,
-                photo: capturedPhoto || p.photo 
-            } : p);
-        } else {
-            // NEW PIN LOGIC
-            const capturedCoords = route.params?.currentCoords;
-            if (!capturedCoords && !capturedPhoto) {
-                 Alert.alert("Missing Info", "Please select a location on the map or take a photo first.");
-                 return;
-            }
-
-            const newPin = {
-                id: Date.now().toString(),
-                categoryId: activeCategory,
-                coords: capturedCoords,
-                ...formData,
-                photo: capturedPhoto, 
-                date: new Date().toLocaleDateString()
-            };
-            updatedPins = [newPin, ...pins];
-        }
-
-        await AsyncStorage.setItem('saved_pins', JSON.stringify(updatedPins));
-        setPins(updatedPins);
-        
-        // Reset states and clear navigation params
-        navigation.setParams({ capturedPhoto: null, currentCoords: null }); 
-        setEditingPin(null);
-        setActiveCategory(null);
+    const openAppGallery = async () => {
+        const data = await AsyncStorage.getItem('app_gallery');
+        setAppGallery(data ? JSON.parse(data) : []);
+        setShowAppGallery(true);
     };
 
-    const deletePin = async (id) => {
-        Alert.alert("Delete Pin", "Are you sure you want to remove this report?", [
-            { text: "Cancel", style: "cancel" },
-            { text: "Delete", style: "destructive", onPress: async () => {
-                const filtered = pins.filter(p => p.id !== id);
-                setPins(filtered);
-                await AsyncStorage.setItem('saved_pins', JSON.stringify(filtered));
-            }}
-        ]);
+    const handlePhonePick = async () => {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: false, // NO CROP
+            quality: 0.8,
+        });
+        if (!result.canceled) setSelectedPhoto(result.assets[0].uri);
     };
 
-    const renderCategory = ({ item }) => {
-        const categoryPins = pins.filter(p => p.categoryId === item.id);
-        const isExpanded = activeCategory === item.id;
+    const handleSave = async () => {
+        if (!title.trim()) return Alert.alert("Error", "Title is required.");
+        const finalCategory = customCategory.trim() !== "" ? customCategory : selectedSection;
+        if (!finalCategory) return Alert.alert("Error", "Category required.");
 
-        return (
-            <View style={styles.categoryContainer}>
-                <View style={styles.categoryHeader}>
-                    <Text style={styles.categoryLabel}>{item.label}</Text>
-                    <TouchableOpacity 
-                        onPress={() => {
-                            setActiveCategory(isExpanded ? null : item.id);
-                            setEditingPin(null);
-                        }}
-                        style={[styles.addBtn, isExpanded && styles.closeBtn]}
-                    >
-                        <Text style={styles.addBtnText}>{isExpanded ? 'Close' : 'Add Report'}</Text>
-                    </TouchableOpacity>
-                </View>
+        const reportData = {
+            id: editingId || Date.now().toString(),
+            title, description, section: finalCategory, rating,
+            photo: selectedPhoto, coords: currentCoords,
+            date: new Date().toLocaleDateString()
+        };
 
-                {isExpanded && (
-                    <LogForm 
-                        onSave={handleSave}
-                        onCancel={() => { setActiveCategory(null); setEditingPin(null); }}
-                        initialData={editingPin}
-                    />
-                )}
+        const updated = editingId 
+            ? savedPins.map(p => p.id === editingId ? reportData : p)
+            : [reportData, ...savedPins];
 
-                {categoryPins.map(pin => (
-                    <LogItem 
-                        key={pin.id}
-                        item={pin}
-                        onDelete={deletePin}
-                        setOnEdit={() => {
-                            setEditingPin(pin);
-                            setActiveCategory(item.id);
-                        }}
-                    />
-                ))}
-            </View>
-        );
+        await AsyncStorage.setItem('saved_pins', JSON.stringify(updated));
+        setSavedPins(updated);
+        setIsFormVisible(false);
+        resetFormState();
+    };
+
+    const resetFormState = () => {
+        setEditingId(null); setTitle(""); setDescription(""); setSelectedSection(""); 
+        setCustomCategory(""); setRating(0); setSelectedPhoto(null); setCurrentCoords(null);
+    };
+
+    const startEdit = (item) => {
+        setEditingId(item.id); setTitle(item.title); setDescription(item.description);
+        const isDefault = SECTIONS.some(s => s.name === item.section);
+        if (isDefault) { setSelectedSection(item.section); setCustomCategory(""); }
+        else { setCustomCategory(item.section); setSelectedSection(""); }
+        setRating(item.rating || 0); setSelectedPhoto(item.photo);
+        setCurrentCoords(item.coords); setIsFormVisible(true);
     };
 
     return (
-        <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-            style={styles.container}
-        >
-            <FlatList
-                data={categories}
-                keyExtractor={(item) => item.id}
-                renderItem={renderCategory}
-                contentContainerStyle={styles.listContent}
-                ListHeaderComponent={
-                    <View style={styles.header}>
-                        <Text style={styles.headerText}>Reviewing saved accessibility reports.</Text>
-                        {route.params?.capturedPhoto && (
-                            <View style={styles.photoAlert}>
-                                <Text style={styles.photoAlertText}>📸 Photo attached to next save</Text>
+        <SafeAreaView style={styles.container}>
+            {isFormVisible ? (
+                <KeyboardAvoidingView behavior="padding" style={{flex:1}}>
+                    <ScrollView contentContainerStyle={styles.formScroll}>
+                        <View style={styles.formHeader}>
+                            <Text style={styles.formTitle}>{editingId ? "Edit" : "New Report"}</Text>
+                            <TouchableOpacity onPress={() => setIsFormVisible(false)}><Ionicons name="close" size={28}/></TouchableOpacity>
+                        </View>
+                        
+                        <Text style={styles.label}>Title</Text>
+                        <TextInput style={styles.input} value={title} onChangeText={setTitle} />
+
+                        <Text style={styles.label}>Photo</Text>
+                        {selectedPhoto ? (
+                            <View style={styles.photoContainer}>
+                                <Image source={{ uri: selectedPhoto }} style={styles.photoPreview} />
+                                <TouchableOpacity style={styles.removeBtn} onPress={() => setSelectedPhoto(null)}><Ionicons name="close-circle" size={32} color="red"/></TouchableOpacity>
+                            </View>
+                        ) : (
+                            <View style={styles.pickerRow}>
+                                <TouchableOpacity style={styles.pickerBtn} onPress={handlePhonePick}><Ionicons name="images-outline" size={24}/><Text>Phone</Text></TouchableOpacity>
+                                <TouchableOpacity style={styles.pickerBtn} onPress={openAppGallery}><Ionicons name="camera-outline" size={24}/><Text>Gallery</Text></TouchableOpacity>
                             </View>
                         )}
+
+                        <Text style={styles.label}>Rating</Text>
+                        <View style={{flexDirection:'row'}}>
+                            {[1,2,3,4,5].map(s => (
+                                <TouchableOpacity key={s} onPress={() => setRating(s)}>
+                                    <Ionicons name={s <= rating ? "star" : "star-outline"} size={35} color="#FFD700" />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <Text style={styles.label}>Category</Text>
+                        <View style={styles.grid}>
+                            {SECTIONS.map(s => (
+                                <TouchableOpacity key={s.name} 
+                                    style={[styles.catCard, selectedSection === s.name && { borderColor: s.color, borderWidth: 2 }]}
+                                    onPress={() => { setSelectedSection(s.name); setCustomCategory(""); }}
+                                >
+                                    <Ionicons name={s.icon} size={22} color={s.color} />
+                                    <Text style={{fontSize: 10}}>{s.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <TouchableOpacity onPress={handleSave} style={styles.saveBtn}><Text style={{color:'white'}}>Save Report</Text></TouchableOpacity>
+                    </ScrollView>
+                </KeyboardAvoidingView>
+            ) : (
+                <FlatList
+                    data={savedPins}
+                    keyExtractor={item => item.id}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity onPress={() => startEdit(item)} style={styles.reportCard}>
+                            <View style={{flexDirection:'row', alignItems:'center'}}>
+                                {item.photo && <Image source={{uri: item.photo}} style={styles.thumb} />}
+                                <View style={{marginLeft: 10, flex:1}}>
+                                    <Text style={{fontWeight:'bold'}}>{item.title}</Text>
+                                    <Text style={{fontSize:10}}>{item.section}</Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                            </View>
+                        </TouchableOpacity>
+                    )}
+                />
+            )}
+
+            <Modal visible={showAppGallery} animationType="slide">
+                <SafeAreaView style={{flex:1}}>
+                    <View style={styles.modalHeader}>
+                        <Text style={{fontWeight:'bold'}}>App Gallery</Text>
+                        <TouchableOpacity onPress={() => setShowAppGallery(false)}><Ionicons name="close" size={32}/></TouchableOpacity>
                     </View>
-                }
-            />
-        </KeyboardAvoidingView>
+                    <FlatList
+                        data={appGallery}
+                        numColumns={4} // 4 COLUMNS
+                        renderItem={({ item }) => (
+                            <TouchableOpacity style={styles.galItem} onPress={() => { setSelectedPhoto(item); setShowAppGallery(false); }}>
+                                <Image source={{ uri: item }} style={styles.galImg} />
+                            </TouchableOpacity>
+                        )}
+                    />
+                </SafeAreaView>
+            </Modal>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
-    listContent: { paddingBottom: 100 },
-    categoryContainer: { borderBottomWidth: 1, borderBottomColor: '#f0f0f0', paddingVertical: 10 },
-    categoryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 10 },
-    categoryLabel: { fontSize: 18, fontWeight: '600', color: '#2d3436' },
-    addBtn: { backgroundColor: '#007bff', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8 },
-    closeBtn: { backgroundColor: '#636e72' },
-    addBtnText: { color: '#fff', fontWeight: 'bold' },
-    header: { padding: 20, backgroundColor: '#f8f9fa' },
-    headerText: { textAlign: 'center', color: '#636e72' },
-    photoAlert: { marginTop: 10, backgroundColor: '#e3f2fd', padding: 8, borderRadius: 5, borderWidth: 1, borderColor: '#bbdefb' },
-    photoAlertText: { textAlign: 'center', color: '#1976d2', fontWeight: 'bold', fontSize: 12 }
+    container: { flex: 1, backgroundColor: '#f8f9fa' },
+    formScroll: { padding: 20 },
+    formHeader: { flexDirection:'row', justifyContent:'space-between', marginBottom: 20 },
+    formTitle: { fontSize: 20, fontWeight: 'bold' },
+    label: { fontSize: 12, fontWeight: 'bold', marginTop: 15, color: '#666' },
+    input: { backgroundColor: 'white', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#ddd' },
+    photoContainer: { width: '100%', height: 250, borderRadius: 10, overflow: 'hidden' },
+    photoPreview: { width: '100%', height: '100%' },
+    removeBtn: { position: 'absolute', top: 10, right: 10 },
+    pickerRow: { flexDirection: 'row', justifyContent: 'space-between' },
+    pickerBtn: { flex: 0.48, backgroundColor: 'white', padding: 15, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#007bff' },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+    catCard: { width: '48%', backgroundColor: 'white', padding: 10, borderRadius: 10, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: '#eee' },
+    saveBtn: { backgroundColor: '#007bff', padding: 15, borderRadius: 10, marginTop: 30, alignItems: 'center' },
+    reportCard: { backgroundColor: 'white', padding: 15, margin: 10, borderRadius: 10, elevation: 1 },
+    thumb: { width: 50, height: 50, borderRadius: 5 },
+    modalHeader: { padding: 15, flexDirection:'row', justifyContent:'space-between' },
+    galItem: { flex: 1/4, aspectRatio: 3/4, padding: 2 }, // 3:4 VERTICAL RATIO
+    galImg: { width: '100%', height: '100%', borderRadius: 4 }
 });
