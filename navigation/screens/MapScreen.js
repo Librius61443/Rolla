@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Alert, Text, StyleSheet, Image, Platform } from 'react-native';
+import { View, Alert, Text, StyleSheet, Image } from 'react-native';
 import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
@@ -81,7 +81,7 @@ export default function MapScreen({ navigation }) {
                                         />
                                     ))}
                                 </View>
-                                <Text style={styles.tapTip}>Tap to view full report</Text>
+                                <Text style={styles.tapTip}>Tap to view in list</Text>
                             </View>
                         </Callout>
                     </Marker>
