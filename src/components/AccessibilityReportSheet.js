@@ -231,49 +231,65 @@ export default function AccessibilityReportSheet({ visible, onClose, onReport })
       setSelectedItem(null);
       handleClose();
 
-      // Show success message IMMEDIATELY for better UX
-      Alert.alert(
-        'Thank You!', 
-        'Your accessibility report has been submitted!',
-        [{ text: 'OK' }]
-      );
-
       // Submit report to backend in the background
       try {
-        let summary = "";
-
+        // First, run AI analysis on the image
         const aiResult = await summarizeImage(photoUri);
-
         console.log("AI RESULT:", aiResult);
 
-      if (!aiResult?.is_relevant) {
-        console.log("Blocked: Not accessibility-related");
-        return;
-      }
+        // Check if the image was denied by AI
+        if (!aiResult?.is_relevant) {
+          console.log("Blocked: Not accessibility-related");
+          // Remove the optimistic report
+          if (onReport) {
+            onReport({ _id: optimisticReport._id, removed: true });
+          }
+          // Show denial message to user
+          Alert.alert(
+            'Photo Not Accepted',
+            aiResult?.overall_assessment || 'The photo does not appear to show an accessibility feature. Please take a photo of an actual accessibility feature.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
 
-      if ((aiResult?.confidence ?? 0) < 80) {
-        console.log("Blocked: Low confidence", aiResult.confidence);
-        return;
-      }
+        if ((aiResult?.confidence ?? 0) < 80) {
+          console.log("Blocked: Low confidence", aiResult.confidence);
+          // Remove the optimistic report
+          if (onReport) {
+            onReport({ _id: optimisticReport._id, removed: true });
+          }
+          // Show denial message to user
+          Alert.alert(
+            'Photo Unclear',
+            'The photo could not be verified as an accessibility feature with enough confidence. Please try taking a clearer photo.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
 
-      // ✅ Only reaches here if confidence >= 80 AND relevant
-      console.log("Uploading report — confidence OK");
+        // ✅ Only reaches here if confidence >= 80 AND relevant
+        console.log("Uploading report — confidence OK");
 
-      await createReport(
-        selectedItem,
-        location.longitude,
-        location.latitude,
-        photoUri,
-        aiResult // optional: pass AI data later
-      );
-
-  // Optional: if you don't want to modify createReport backend yet,
-  // just ignore passing summary and only use it locally.
+        const result = await createReport(
+          selectedItem,
+          location.longitude,
+          location.latitude,
+          photoUri,
+          aiResult
+        );
 
         // Update with real report data (parent will refresh)
         if (onReport && result) {
           onReport(result);
         }
+        
+        // Show success message after successful submission
+        Alert.alert(
+          'Thank You!', 
+          'Your accessibility report has been submitted!',
+          [{ text: 'OK' }]
+        );
         
         // Refresh user data to update points and stats
         if (refreshUser) {

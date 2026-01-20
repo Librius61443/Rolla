@@ -25,15 +25,14 @@ export default function App() {
   useEffect(() => {
     if (mapIsReady) {
       setAppIsReady(true);
+      return;
     }
     // Fallback timeout in case map takes too long
     const timeout = setTimeout(() => {
-      if (!appIsReady) {
-        setAppIsReady(true);
-      }
+      setAppIsReady(true);
     }, 5000);
     return () => clearTimeout(timeout);
-  }, [mapIsReady, appIsReady]);
+  }, [mapIsReady]);
 
   const handleMapReady = useCallback(() => {
     setMapIsReady(true);

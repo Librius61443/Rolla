@@ -10,7 +10,7 @@ import { Magnetometer } from 'expo-sensors';
 import { getCurrentCoordinates } from '../services/location';
 import { useTheme, darkMapTheme, lightMapTheme } from '../styles/theme';
 
-export default function MapboxMap({ is3D = true, onMapReady, reports = [], onReportClick, destination = null, onRouteInfo }) {
+export default function MapboxMap({ is3D = true, onMapReady, reports = [], onReportClick, destination = null, onRouteInfo, mapRef }) {
   const { isDark, mapTheme, colors } = useTheme();
   const [initialCoords, setInitialCoords] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -18,6 +18,18 @@ export default function MapboxMap({ is3D = true, onMapReady, reports = [], onRep
   const [heading, setHeading] = useState(0);
   const webViewRef = useRef(null);
   const lastHeadingRef = useRef(0);
+  
+  // Expose centerOnUser method via ref
+  React.useImperativeHandle(mapRef, () => ({
+    centerOnUser: () => {
+      if (webViewRef.current && mapReady) {
+        webViewRef.current.injectJavaScript(`
+          window.centerOnUser && window.centerOnUser();
+          true;
+        `);
+      }
+    }
+  }), [mapReady]);
 
   useEffect(() => {
     (async () => {
@@ -342,7 +354,7 @@ export default function MapboxMap({ is3D = true, onMapReady, reports = [], onRep
               function getChevronSize(zoom) {
                 // Base size at zoom 16, scale proportionally
                 const baseZoom = 16;
-                const baseSize = 0.00008;
+                const baseSize = 0.0001;
                 // Exponential scaling - size doubles for each zoom level decrease
                 return baseSize * Math.pow(2, baseZoom - zoom);
               }
@@ -400,7 +412,7 @@ export default function MapboxMap({ is3D = true, onMapReady, reports = [], onRep
               function getChevronHeight(zoom) {
                 // Scale height to maintain visual proportion
                 const baseZoom = 16;
-                const baseHeight = 45;
+                const baseHeight = 5;
                 return baseHeight * Math.pow(2, baseZoom - zoom);
               }
 
@@ -617,15 +629,15 @@ export default function MapboxMap({ is3D = true, onMapReady, reports = [], onRep
               // Hide any existing Mapbox building layers to prevent conflicts
               const existingLayers = map.getStyle().layers;
               existingLayers.forEach(layer => {
-                if (layer['source-layer'] === 'building' && layer.id !== '3d-buildings') {
+                if (layer['source-layer'] === 'building' && layer.id !== 'buildings-2d') {
                   try {
                     map.setLayoutProperty(layer.id, 'visibility', 'none');
                   } catch(e) {}
                 }
               });
               
-              // Add 3D buildings layer
-              if (!map.getLayer('3d-buildings')) {
+              // Add 2D buildings layer (flat fill for better performance)
+              if (!map.getLayer('buildings-2d')) {
                 // Find the first symbol layer to insert buildings below it
                 const layers = map.getStyle().layers;
                 let labelLayerId;
@@ -637,20 +649,17 @@ export default function MapboxMap({ is3D = true, onMapReady, reports = [], onRep
                 }
                 
                 map.addLayer({
-                  'id': '3d-buildings',
+                  'id': 'buildings-2d',
                   'source': 'composite',
                   'source-layer': 'building',
-                  'filter': ['==', 'extrude', 'true'],
-                  'type': 'fill-extrusion',
+                  'type': 'fill',
                   'minzoom': 13,
                   'paint': {
-                    'fill-extrusion-color': theme.building,
-                    'fill-extrusion-height': ['get', 'height'],
-                    'fill-extrusion-base': ['get', 'min_height'],
-                    'fill-extrusion-opacity': theme.buildingOpacity
+                    'fill-color': theme.building,
+                    'fill-opacity': theme.buildingOpacity
                   }
                 }, labelLayerId);
-                console.log('3D buildings layer added');
+                console.log('2D buildings layer added');
               }
 
               // Add terrain
@@ -690,22 +699,19 @@ export default function MapboxMap({ is3D = true, onMapReady, reports = [], onRep
               const style = map.getStyle();
               const layers = style && style.layers ? style.layers : [];
 
-              // Hide any existing Mapbox building layers to prevent conflicts with our 3D buildings
+              // Hide any existing Mapbox building layers to prevent conflicts with our 2D buildings
               layers.forEach(layer => {
-                if (layer['source-layer'] === 'building' && layer.id !== '3d-buildings') {
+                if (layer['source-layer'] === 'building' && layer.id !== 'buildings-2d') {
                   try {
                     map.setLayoutProperty(layer.id, 'visibility', 'none');
                   } catch(e) {}
                 }
               });
 
-              // Update 3D buildings
-              if (map.getLayer('3d-buildings')) {
-                map.setPaintProperty('3d-buildings', 'fill-extrusion-color', theme.building);
-                map.setPaintProperty('3d-buildings', 'fill-extrusion-opacity', theme.buildingOpacity);
-                // Re-ensure height and base are set correctly
-                map.setPaintProperty('3d-buildings', 'fill-extrusion-height', ['get', 'height']);
-                map.setPaintProperty('3d-buildings', 'fill-extrusion-base', ['get', 'min_height']);
+              // Update 2D buildings
+              if (map.getLayer('buildings-2d')) {
+                map.setPaintProperty('buildings-2d', 'fill-color', theme.building);
+                map.setPaintProperty('buildings-2d', 'fill-opacity', theme.buildingOpacity);
               }
 
               // Update sky
@@ -923,11 +929,72 @@ export default function MapboxMap({ is3D = true, onMapReady, reports = [], onRep
             });
           };
 
-          // Handle chevron heading update from device compass
-          window.updateChevronHeading = function(heading) {
-            currentHeading = heading;
+          // Spring animation for smooth chevron rotation
+          let targetHeading = 0;
+          let animatedHeading = 0;
+          let headingVelocity = 0;
+          let headingAnimationFrame = null;
+          
+          // Spring physics constants
+          const SPRING_STIFFNESS = .1;  // Lower = slower response
+          const SPRING_DAMPING = 0.1;     // Higher = less bouncy
+          
+          // Normalize angle difference to -180 to 180
+          function normalizeAngleDiff(diff) {
+            while (diff > 180) diff -= 360;
+            while (diff < -180) diff += 360;
+            return diff;
+          }
+          
+          // Spring animation loop for heading
+          function animateHeading() {
+            const diff = normalizeAngleDiff(targetHeading - animatedHeading);
+            
+            // Apply spring physics
+            const springForce = diff * SPRING_STIFFNESS;
+            headingVelocity += springForce;
+            headingVelocity *= SPRING_DAMPING;
+            animatedHeading += headingVelocity;
+            
+            // Normalize animated heading to 0-360
+            animatedHeading = ((animatedHeading % 360) + 360) % 360;
+            
+            // Update the actual heading used by chevron
+            currentHeading = animatedHeading;
             if (chevronFunctions && chevronFunctions.updateChevron) {
               chevronFunctions.updateChevron();
+            }
+            
+            // Continue animating if there's still movement
+            if (Math.abs(diff) > 0.1 || Math.abs(headingVelocity) > 0.1) {
+              headingAnimationFrame = requestAnimationFrame(animateHeading);
+            } else {
+              headingAnimationFrame = null;
+            }
+          }
+          
+          // Handle chevron heading update from device compass
+          window.updateChevronHeading = function(heading) {
+            targetHeading = heading;
+            
+            // Start animation if not already running
+            if (!headingAnimationFrame) {
+              headingAnimationFrame = requestAnimationFrame(animateHeading);
+            }
+          };
+          
+          // Center map on user location
+          window.centerOnUser = function() {
+            if (userLocation && map) {
+              map.easeTo({
+                center: userLocation,
+                zoom: 17,
+                pitch: currentPitch,
+                duration: 800,
+                easing: function(t) {
+                  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+                }
+              });
             }
           };
 

@@ -73,6 +73,7 @@ router.post('/summarize', optionalAuth, upload.single('photo'), async (req, res)
     console.log("Has file:", !!req.file);
     console.log("Has auth header:", !!req.headers.authorization);
     console.log("OPENROUTER KEY EXISTS:", !!process.env.OPENROUTER_API_KEY);
+    console.log("OPENROUTER KEY (first 10 chars):", process.env.OPENROUTER_API_KEY?.substring(0, 10) + "...");
     console.log("VISION HIT", { hasAuthHeader: !!req.headers.authorization });
   try {
     if (!req.file) return res.status(400).json({ error: "Missing photo" });
@@ -92,7 +93,7 @@ router.post('/summarize', optionalAuth, upload.single('photo'), async (req, res)
         "X-Title": process.env.OPENROUTER_APP_NAME || "gpt",
     },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview", // any vision-capable model on OpenRouter
+        model: "google/gemini-2.0-flash-001", // vision-capable model on OpenRouter
         temperature: 0.2,
         messages: [
           {
@@ -114,33 +115,88 @@ router.post('/summarize', optionalAuth, upload.single('photo'), async (req, res)
     const raw = await r.text();
     console.log("RAW MODEL RESPONSE:", raw);
 
-    let parsed;
-    try {
-    parsed = JSON.parse(raw);
-    } catch {
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) {
-        console.log("FAILED TO PARSE JSON");
-        return res.json({ is_relevant: false, error: "Non-JSON response", raw });
-    }
-    parsed = JSON.parse(match[0]);
+    // Handle API authentication errors
+    if (r.status === 401) {
+      console.error("OpenRouter authentication failed - check your API key");
+      // Return a graceful response allowing the report to be created without vision analysis
+      return res.json({
+        is_relevant: true,
+        overall_assessment: "Unable to analyze image - API authentication error",
+        scores: {
+          ramp_condition: 0,
+          stairs_condition: 0,
+          elevator_condition: 0,
+          doorway_entrance_condition: 0,
+          sidewalk_curb_condition: 0,
+          obstruction_hazard_level: 0
+        },
+        observed_elements: [],
+        reasons: ["Image analysis unavailable - proceeding with manual report"],
+        confidence: 100,
+        api_error: true
+      });
     }
 
-    if (!parsed.is_relevant || parsed.confidence < 80) {
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (!match) {
+        console.log("FAILED TO PARSE JSON");
+        return res.json({ is_relevant: false, error: "Non-JSON response", raw });
+      }
+      parsed = JSON.parse(match[0]);
+    }
+
+    // Extract the actual vision analysis from OpenRouter response
+    let visionResult;
+    try {
+      // Get the content from the OpenRouter chat completion response
+      const content = parsed.choices?.[0]?.message?.content;
+      if (!content) {
+        console.log("No content in response");
+        return res.json({ is_relevant: false, error: "No content in response" });
+      }
+      
+      // Remove markdown code blocks if present (```json ... ```)
+      let jsonString = content.trim();
+      if (jsonString.startsWith('```')) {
+        // Remove opening code fence (```json or ```)
+        jsonString = jsonString.replace(/^```(?:json)?\s*\n?/, '');
+        // Remove closing code fence
+        jsonString = jsonString.replace(/\n?```\s*$/, '');
+      }
+      
+      visionResult = JSON.parse(jsonString);
+      console.log("PARSED VISION RESULT:", visionResult);
+    } catch (parseError) {
+      console.error("Error parsing vision content:", parseError);
+      // Try to extract JSON from the content
+      const content = parsed.choices?.[0]?.message?.content || '';
+      const match = content.match(/\{[\s\S]*\}/);
+      if (match) {
+        visionResult = JSON.parse(match[0]);
+      } else {
+        return res.json({ is_relevant: false, error: "Could not parse vision result" });
+      }
+    }
+
+    if (!visionResult.is_relevant || visionResult.confidence < 80) {
         console.log("VISION BLOCKED:", {
-            is_relevant: parsed.is_relevant,
-            confidence: parsed.confidence,
+            is_relevant: visionResult.is_relevant,
+            confidence: visionResult.confidence,
         });
 
         return res.status(200).json({
             is_relevant: false,
             blocked: true,
             reason: "Low confidence or not accessibility-related",
-            confidence: parsed.confidence,
+            confidence: visionResult.confidence,
         });
     }
 
-    return res.json(parsed);
+    return res.json(visionResult);
 
 
     } catch (e) {

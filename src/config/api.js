@@ -12,7 +12,7 @@ const PRODUCTION_API_URL = 'https://rolla-backend.up.railway.app/api';
 
 // DEVELOPMENT: Your local IP address for testing on physical devices
 // Find it by running: ifconfig (Mac) or ipconfig (Windows)
-const DEV_API_URL = 'http://172.20.10.7:3000/api';
+const DEV_API_URL = 'http://10.36.12.44:3000/api';
 
 // Automatically switch between dev and production
 export const API_BASE_URL = __DEV__ ? DEV_API_URL : PRODUCTION_API_URL;

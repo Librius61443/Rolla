@@ -1,7 +1,10 @@
 /**
  * Seed Google Places Data Script
  * Fetches real accessibility-relevant places from Google Maps Places API
- * within 10km of a specified location
+ * within specified radius of a location
+ * 
+ * Usage: node seedGooglePlacesData.js [latitude] [longitude] [radius_km]
+ * Example: node seedGooglePlacesData.js 43.777118 -79.502237 2
  */
 
 const path = require('path');
@@ -9,10 +12,11 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const mongoose = require('mongoose');
 const Report = require('../models/Report');
 
-// Center location (Mississauga - Square One area)
-const CENTER_LAT = 43.5933;
-const CENTER_LNG = -79.6426;
-const RADIUS_METERS = 10000; // 10km
+// Parse command line arguments or use defaults
+const CENTER_LAT = parseFloat(process.argv[2]) || 43.5933;
+const CENTER_LNG = parseFloat(process.argv[3]) || -79.6426;
+const RADIUS_KM = parseFloat(process.argv[4]) || 10;
+const RADIUS_METERS = RADIUS_KM * 1000;
 
 // Google Maps API Key - add to your .env file as GOOGLE_MAPS_API_KEY
 const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY;

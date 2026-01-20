@@ -3,7 +3,7 @@
  * Main map view with 2D/3D toggle and theme support
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Pressable, StyleSheet, StatusBar, Animated, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -18,6 +18,7 @@ import { fetchNearbyReports } from '../services/api';
 
 export default function MapScreen({ onMapReady }) {
   const navigation = useNavigation();
+  const mapRef = useRef(null);
   const [is3D, setIs3D] = useState(true);
   const [showAccessibilitySheet, setShowAccessibilitySheet] = useState(false);
   const [reports, setReports] = useState([]);
@@ -162,6 +163,7 @@ export default function MapScreen({ onMapReady }) {
         onReportClick={handleReportClick}
         destination={destination}
         onRouteInfo={handleRouteInfo}
+        mapRef={mapRef}
       />
       
       {/* Menu Button */}
@@ -206,6 +208,28 @@ export default function MapScreen({ onMapReady }) {
           <Ionicons
             name={is3D ? 'layers-outline' : 'layers'}
             size={30}
+            color={pressed ? colors.secondary : colors.accent}
+          />
+        )}
+      </Pressable>
+
+      {/* Center on User Button */}
+      <Pressable
+        onPress={() => mapRef.current?.centerOnUser()}
+        style={({ pressed }) => [
+          styles.centerButton,
+          {
+            backgroundColor: pressed ? colors.accent : mapTheme.uiGreyCircle,
+            shadowOpacity: pressed ? 0.8 : 0.3,
+            shadowRadius: pressed ? 14 : 8,
+            elevation: pressed ? 10 : 5,
+          }
+        ]}
+      >
+        {({ pressed }) => (
+          <Ionicons
+            name="locate"
+            size={26}
             color={pressed ? colors.secondary : colors.accent}
           />
         )}
@@ -389,6 +413,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 40,
     right: 20,
+    zIndex: 10,
+    width: 80,
+    height: 80,
+    borderRadius: 999,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+  },
+  centerButton: {
+    position: 'absolute',
+    bottom: 40,
+    left: 20,
     zIndex: 10,
     width: 80,
     height: 80,

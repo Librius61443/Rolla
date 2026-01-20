@@ -496,7 +496,7 @@ const ProfileScreen = ({ navigation }) => {
           </TouchableOpacity>
         )}
 
-        <Text style={styles.version}>Rolla v1.0.0</Text>
+        <Text style={styles.version}>Rolla v1.0.1</Text>
       </ScrollView>
     </SafeAreaView>
   );

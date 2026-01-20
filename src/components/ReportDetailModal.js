@@ -90,6 +90,12 @@ export default function ReportDetailModal({ visible, reportId, onClose, onReport
 
   useEffect(() => {
     if (visible && reportId) {
+      // Don't try to fetch temp/optimistic reports - they don't exist on server yet
+      if (reportId.toString().startsWith('temp-')) {
+        console.log('Skipping fetch for temporary report:', reportId);
+        setLoading(false);
+        return;
+      }
       loadReport();
       checkUserLocation();
     } else {

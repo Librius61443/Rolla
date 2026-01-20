@@ -347,7 +347,7 @@ const AboutScreen = ({ navigation }) => {
             resizeMode="contain"
           />
           <Text style={styles.appName}>Rolla</Text>
-          <Text style={styles.version}>Version 1.0.0</Text>
+          <Text style={styles.version}>Version 1.0.1</Text>
         </View>
 
         {/* Mission */}

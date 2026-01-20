@@ -10,7 +10,7 @@ import { Animated, StatusBar, Platform, useColorScheme } from 'react-native';
 export const darkColors = {
   primary: '#3c3d41',
   secondary: '#252525',
-  tertiary: '#3a475a',
+  tertiary: '#3a3a5a',
   accent: '#7789ff',
   accessibilityColor: '#ffffff',
   accentDark: '#2554ff',
